@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+      # staging is where contributors build and test, so it is pushed to directly.
+      # Without it here those pushes would run no CI and no private-data guard.
+      - staging
 
 permissions:
   contents: read

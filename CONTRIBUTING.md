@@ -10,11 +10,11 @@ Short version: work from a brief, stay inside your globs, prove the change with 
 
 ## Branches, commits, pull requests
 
-- Branch from `main`: `f##/<slug>` for feature work, `<wp-id>/<slug>` in lower case for other work packages (`r00/governance`, `s01/renderer-escaping`).
+- Branch from `staging`: `f##/<slug>` for feature work, `<wp-id>/<slug>` in lower case for other work packages (`r00/governance`, `s01/renderer-escaping`).
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org/) with the feature or work-package id as the scope: `feat(F08): ...`, `fix(S01): ...`, `docs(D06): ...`, `test(Q02): ...`, `chore(R00): ...`.
 - One work package per pull request. The PR title carries the id as its scope. Fill in the pull-request template completely; the "Work package / Feature id" line is required.
-- `main` is the single long-lived branch. CI must be green before merge and PRs are squash-merged. GitHub does not enforce branch protection or required reviews on a private repository under a free personal account, so the green CI run and `npm run guard` are the gate; treat them as mandatory. Never force-push to `main`.
-- Rebase your branch on `main` rather than merging `main` into it.
+- Two long-lived branches. `staging` is where contributors build and test, and is the default target for a pull request; `main` holds what has been accepted. CI runs on a push to either and on every pull request, whatever its target. CI must be green before merge and PRs are squash-merged. GitHub does not enforce branch protection or required reviews on a private repository under a free personal account, so the green CI run and `npm run guard` are the gate; treat them as mandatory. Never force-push to `main` or `staging`; neither can be protected on a free personal account, so this is a rule rather than a control.
+- Rebase your branch on the branch you are targeting rather than merging that branch into yours.
 
 ## Definition of done
 

@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+      # staging is where contributors build and test, so it is pushed to directly.
+      # Without it here those pushes would run no CI and no private-data guard.
+      - staging
   schedule:
     # Weekly, Monday 06:17 UTC. Off the hour to avoid the top-of-hour queue.
     - cron: '17 6 * * 1'
