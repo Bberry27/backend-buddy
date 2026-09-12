@@ -1,0 +1,20 @@
+# Colour literals allowed outside the token layer, for scripts/check-hardcoded-colors.mjs
+# (work package C02, feature F21, CTQ-11).
+#
+# Format, one entry per line:
+#
+#   path | literal | work package | reason
+#
+# The work package is the one that removes the entry, so no allowance is open-ended. A literal of
+# `*` covers every literal in that file. An entry nothing matches fails the check, so a value that
+# has been tokenised cannot leave a stale allowance behind.
+#
+# The token layer itself (packages/explorer/src/tokens.css, palettes.ts) and the test files are
+# exempt in the script, not here: literals are their subject matter.
+#
+# Recorded for clarity, not as an allowance: packages/explorer/src/LivingERD.tsx reads
+# getComputedStyle(canvas).backgroundColor when exporting the diagram to PNG or SVG, so the
+# exported image keeps the background the reader saw. That is a resolved value, not a literal, and
+# the check never sees it.
+
+packages/explorer/src/city-layout.ts | * | W05 | The seven-colour district palette and its index cycle at city-layout.ts:77 and :194. W05 replaces the call site with domainColor() from palettes.ts and deletes both.

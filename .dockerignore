@@ -1,0 +1,45 @@
+# Mirrors .gitignore, and then some: a build context is copied into image layers and
+# stays there even if a later layer deletes it, so private data must never enter one.
+# Keep this file in step with .gitignore and scripts/private_data_guard.mjs.
+
+# Private local data. Never in an image.
+/reference/
+/examples/
+.qa/
+outputs/
+
+# Build outputs: the image builds its own from a fixture.
+dist/
+packages/*/dist/
+skill/assets/extensions/dist/
+
+# Dependencies and caches: restored inside the image from the lockfile.
+**/node_modules/
+**/__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+coverage/
+
+# Secrets and local environment.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Version control and editor state.
+.git/
+.githooks/
+.vscode/
+*.code-workspace
+
+# Test and QA output.
+playwright-report/
+test-results/
+
+# Documentation is not needed to build or serve the artifact.
+/docs/
+*.md
+!fixtures/README.md

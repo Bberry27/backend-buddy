@@ -1,0 +1,4 @@
+# private_data_guard allow list: files larger than 2 MB that may be tracked anyway.
+# One repository-relative path per line, forward slashes, no globs.
+# Blank lines and lines starting with # are ignored.
+# Keep this list empty unless a reviewer has approved the file (CTQ-14).

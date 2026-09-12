@@ -1,0 +1,34 @@
+#!/bin/sh
+# Pre-commit hook for backend-buddy.
+#
+# Runs the private-data guard (scripts/private_data_guard.mjs) and blocks the commit
+# when it reports a violation (CTQ-14: private-data hygiene, guard green every commit).
+#
+# Git does not read .githooks/ by default. Enable it once per clone with either:
+#     git config core.hooksPath .githooks
+#     node scripts/install-hooks.mjs
+#
+# Windows note: NTFS has no executable bit. Git for Windows runs hooks through its
+# bundled sh, so this file works there without chmod. Linux and macOS require the
+# executable bit; install-hooks.mjs sets it locally, and the tracked mode is kept at
+# 100755 with:  git update-index --chmod=+x .githooks/pre-commit
+#
+# The guard honours BB_DENYLIST_FILE when it is exported in the committing shell.
+
+set -u
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || root=.
+cd "$root" || exit 1
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: node is required to run scripts/private_data_guard.mjs" >&2
+  exit 1
+fi
+
+if ! node scripts/private_data_guard.mjs; then
+  echo "" >&2
+  echo "pre-commit: commit blocked by the private-data guard; resolve the violations listed above." >&2
+  exit 1
+fi
+
+exit 0

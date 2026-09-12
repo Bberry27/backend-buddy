@@ -1,0 +1,336 @@
+{
+  "project": {
+    "name": "<img src=x onerror=alert(1)> Hostile \"Fixture\" \\ =cmd|' /C calc'!A0",
+    "key": "hostile",
+    "dialect": "postgresql"
+  },
+  "source": {
+    "file": "javascript:alert(document.domain)",
+    "commit": "=1+1",
+    "sha256": "8c909f18f04b8cc1dcccff7a50c93f893ef6ae81f84ee108bc8086519cbc977f",
+    "generated": "2026-01-01T00:00:00Z",
+    "basis": "javascript:alert(document.domain) =cmd|' /C calc'!A0 +SUM(1) <img src=x onerror=alert(1)> </script><script>alert(1)</script>"
+  },
+  "tables": [
+    {
+      "id": "hostile.<img src=x onerror=alert(1)>",
+      "schema": "hostile",
+      "name": "<img src=x onerror=alert(1)>",
+      "className": "</script><script>alert(1)</script>__ICON_DATA__ __SCHEMA_DATA__",
+      "domain": "__proto__",
+      "type": "constructor",
+      "file": "javascript:alert(document.domain)",
+      "line": 1,
+      "pk": "id",
+      "primaryKey": [
+        "id"
+      ],
+      "allColumns": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "pk": true,
+          "fk": "",
+          "nullable": "False",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "__proto__",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false,
+          "typeBasis": "<img src=x onerror=alert(1)> typeBasis"
+        },
+        {
+          "name": "=cmd|' /C calc'!A0",
+          "type": "String(64)",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "+SUM(1)",
+          "type": "Integer",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "-1+1",
+          "type": "Integer",
+          "pk": false,
+          "fk": "",
+          "nullable": "",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "@import",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "\"quoted\" \\backslash",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "javascript:alert(document.domain)",
+          "type": "String(2048)",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "<svg onload=alert(1)>",
+          "type": "String(64)",
+          "pk": false,
+          "fk": "",
+          "nullable": "",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "</script><script>alert(1)</script>",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_twenty_more_chars__",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "constructor",
+          "type": "JSONB",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "</style><style>body{display:none}</style>",
+          "columns": [
+            "+SUM(1)"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "=HYPERLINK(\"http://example.invalid\",\"click\")",
+          "columns": [
+            "-1+1"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_injection",
+          "definition": "1=1; DROP TABLE users; --"
+        }
+      ]
+    },
+    {
+      "id": "hostile.constructor",
+      "schema": "hostile",
+      "name": "constructor",
+      "className": "Constructor",
+      "domain": "toString",
+      "type": "hasOwnProperty",
+      "file": "synthetic/schema.json",
+      "line": 15,
+      "pk": "id",
+      "primaryKey": [
+        "id"
+      ],
+      "allColumns": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "pk": true,
+          "fk": "",
+          "nullable": "False",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "valueOf",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "__defineGetter__",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        }
+      ],
+      "indexes": [],
+      "uniques": [],
+      "checks": []
+    },
+    {
+      "id": "hostile.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_twenty_more_chars__",
+      "schema": "hostile",
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_twenty_more_chars__",
+      "className": "XxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxTwentyMoreChars",
+      "domain": "__proto__",
+      "type": "Transaction / operational",
+      "file": "synthetic/schema.json",
+      "line": 20,
+      "pk": "id",
+      "primaryKey": [
+        "id"
+      ],
+      "allColumns": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "pk": true,
+          "fk": "",
+          "nullable": "False",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "owner_id",
+          "type": "Integer",
+          "pk": false,
+          "fk": "hostile.<img src=x onerror=alert(1)>.id",
+          "nullable": "True",
+          "index": true,
+          "unique": false
+        },
+        {
+          "name": "proto_id",
+          "type": "Integer",
+          "pk": false,
+          "fk": "hostile.constructor.id",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "O'Brien \\ \"Quote\"",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "",
+          "index": false,
+          "unique": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "columns": [
+            "owner_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [],
+      "checks": []
+    },
+    {
+      "id": "hostile.v_<b>bold</b>",
+      "schema": "hostile",
+      "name": "v_<b>bold</b>",
+      "className": "VBBoldB",
+      "domain": "toString",
+      "type": "Reporting view",
+      "kind": "view",
+      "definition": "</script><img src=x onerror=alert(1)><style>*{display:none}</style>",
+      "file": "javascript:alert(document.domain)",
+      "line": 26,
+      "pk": "",
+      "primaryKey": [],
+      "allColumns": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "pk": false,
+          "fk": "",
+          "nullable": "False",
+          "index": false,
+          "unique": false
+        },
+        {
+          "name": "label",
+          "type": "Text",
+          "pk": false,
+          "fk": "",
+          "nullable": "True",
+          "index": false,
+          "unique": false
+        }
+      ],
+      "indexes": [],
+      "uniques": [],
+      "checks": []
+    }
+  ],
+  "links": [
+    {
+      "source": "hostile.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_twenty_more_chars__",
+      "column": "owner_id",
+      "target": "hostile.<img src=x onerror=alert(1)>",
+      "targetColumn": "id",
+      "kind": "declared FK",
+      "constraintId": "fk_<b>bold</b>_<img src=x onerror=alert(1)>",
+      "ondelete": "'; DROP TABLE x; --"
+    },
+    {
+      "source": "hostile.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_twenty_more_chars__",
+      "column": "proto_id",
+      "target": "hostile.constructor",
+      "targetColumn": "id",
+      "kind": "declared FK",
+      "constraintId": "__proto__"
+    },
+    {
+      "source": "hostile.v_<b>bold</b>",
+      "column": "id",
+      "target": "hostile.<img src=x onerror=alert(1)>",
+      "targetColumn": "id",
+      "kind": "inferred by naming"
+    }
+  ]
+}

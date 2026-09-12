@@ -1,0 +1,6 @@
+# Pinned install for CI and pip-audit. The compatible range lives in pyproject.toml; this file
+# pins the exact version the tests and the audit run against.
+#
+#   python -m pip install -r packages/profiler/requirements.txt
+#   pip-audit -r packages/profiler/requirements.txt
+jsonschema==4.26.0

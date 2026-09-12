@@ -1,0 +1,205 @@
+/*
+ * Design tokens (work package C02, feature F21, CTQ-02, CTQ-04, CTQ-11).
+ *
+ * Two blocks, one per theme, selected by `data-theme` on the root element exactly as the
+ * offline artifact host does (`skill/assets/explorer.html:2`, `:53-56`).
+ *
+ * Section 1 repeats the sixteen host variables byte for byte from `explorer.html:9-10`. In the
+ * artifact this changes nothing: the bundled stylesheet is inlined after the host block with the
+ * same values, so the host chrome renders identically. Outside the artifact -- the SPA that W01
+ * builds, a view mounted on its own in a test page -- this block is what makes the variables
+ * exist at all, which is why every `var(--x, #hex)` fallback could be removed from the views.
+ *
+ * Sections 2 and 3 are new: semantic tokens, and the six data palettes. `palettes.ts` holds the
+ * same values as TypeScript for the callers that cannot read a custom property (three.js
+ * materials, the Join Matrix canvas, SVG attributes) and `tokens.test.ts` fails if the two
+ * disagree in either direction. Change a colour in `palettes.ts` and here in the same edit.
+ *
+ * Constraints this file has to keep:
+ * - No fetched resource of any kind: no URL reference, no import rule, no external font. The
+ *   artifact CSP allows none of them (ADR-0006 decision 5, limits-and-caps.md section C), and
+ *   tokens.test.ts asserts their absence rather than trusting this note.
+ * - The sixteen host values are frozen; changing one needs an ADR.
+ * - Custom properties only. No selector here styles an element, so bundle order against the
+ *   nine view stylesheets cannot matter.
+ * - Declarations are written without a space after the colon, matching the host page and keeping
+ *   the bundled output greppable: esbuild preserves a custom property's value verbatim, so
+ *   `--accent:#71d5c2` in this file is `--accent:#71d5c2` in `dist/extensions.css`.
+ */
+
+:root {
+  color-scheme:light;
+
+  /* 1. Host variables, byte-identical to skill/assets/explorer.html:9 */
+  --bg:#f4f6f7;
+  --panel:#fff;
+  --raised:#edf1f3;
+  --ink:#20262b;
+  --muted:#53646c;
+  --line:#ccd5d9;
+  --accent:#087c77;
+  --soft:#d7eeea;
+  --edge:#98a7ac;
+  --focus:#006e69;
+  --blue:#3165a0;
+  --orange:#af6226;
+  --green:#31754e;
+  --purple:#7654a2;
+  --red:#af465c;
+  --grid:#e4eaec;
+
+  /* 2. Semantic tokens. The first four are the host hues under names that say what they mean.
+     --dim is for marks and strokes only, never text: see the note in palettes.ts. */
+  --danger:#af465c;
+  --success:#31754e;
+  --warning:#af6226;
+  --focus-ring:#006e69;
+  --selection:#087c77;
+  --selection-soft:#d7eeea;
+  --dim:#78868c;
+  --elevation-1:#00000011;
+  --elevation-2:#00000022;
+  --elevation-3:#00000033;
+
+  /* 3a. Domain, district and community hues: one per 30-degree sector, 12 of them. */
+  --palette-domain-01:#7e0636;
+  --palette-domain-02:#906054;
+  --palette-domain-03:#604206;
+  --palette-domain-04:#909054;
+  --palette-domain-05:#54780c;
+  --palette-domain-06:#66907e;
+  --palette-domain-07:#064e48;
+  --palette-domain-08:#127884;
+  --palette-domain-09:#1896d8;
+  --palette-domain-10:#484266;
+  --palette-domain-11:#8436cc;
+  --palette-domain-12:#f63cae;
+
+  /* 3b. Column families, one per COLUMN_FAMILIES entry in column-logic.ts. */
+  --ct-family-integer:#2496cc;
+  --ct-family-decimal:#66846c;
+  --ct-family-text:#849012;
+  --ct-family-datetime:#6c6600;
+  --ct-family-boolean:#9c004e;
+  --ct-family-json:#5a00a2;
+  --ct-family-binary:#246cae;
+  --ct-family-uuid:#a87290;
+  --ct-family-enum:#5a3612;
+  --ct-family-other:#004842;
+
+  /* 3c. Schema diff statuses. `unchanged` stays --muted. */
+  --sd-added:#148054;
+  --sd-removed:#901834;
+  --sd-changed:#886400;
+
+  /* 3d. Join Matrix cells: soft is one declared foreign key, plain is several. */
+  --matrix-one-to-one:#00504c;
+  --matrix-one-to-one-soft:#288884;
+  --matrix-one-to-many:#a00008;
+  --matrix-one-to-many-soft:#f45044;
+  --matrix-unknown:#3c0870;
+  --matrix-unknown-soft:#6830a8;
+  --matrix-count-ink:#ffffff;
+
+  /* 3e. Arc Diagram: ordinary dependency, cycle member, isolated table. */
+  --arc-normal:#006460;
+  --arc-cycle:#e01414;
+  --arc-isolated:#8c54d0;
+
+  /* 3f. Schema City roads: declared, inferred, crossing a district boundary. */
+  --road-declared:#006c68;
+  --road-inferred:#ac70f0;
+  --road-cross:#e82018;
+
+  /* 3g. Schema City hemisphere light. Light sources, not surfaces: no contrast rule applies. */
+  --city-light-sky:#ffffff;
+  --city-light-ground:#d3dbde;
+}
+
+:root[data-theme=dark] {
+  color-scheme:dark;
+
+  /* 1. Host variables, byte-identical to skill/assets/explorer.html:10 */
+  --bg:#131718;
+  --panel:#1b2022;
+  --raised:#242b2e;
+  --ink:#edf2f3;
+  --muted:#a8b7bd;
+  --line:#3a4549;
+  --accent:#71d5c2;
+  --soft:#253e38;
+  --edge:#64767d;
+  --focus:#a4eee0;
+  --blue:#7fb6f0;
+  --orange:#edb571;
+  --green:#8fd3a5;
+  --purple:#b99de1;
+  --red:#ee99aa;
+  --grid:#222a2d;
+
+  /* 2. Semantic tokens. */
+  --danger:#ee99aa;
+  --success:#8fd3a5;
+  --warning:#edb571;
+  --focus-ring:#a4eee0;
+  --selection:#71d5c2;
+  --selection-soft:#253e38;
+  --dim:#7f9096;
+  --elevation-1:#0000002b;
+  --elevation-2:#00000040;
+  --elevation-3:#00000059;
+
+  /* 3a. Domain, district and community hues, hue-matched to the light set index by index. */
+  --palette-domain-01:#cc6c8a;
+  --palette-domain-02:#ea1e1e;
+  --palette-domain-03:#90725a;
+  --palette-domain-04:#eade96;
+  --palette-domain-05:#a8c000;
+  --palette-domain-06:#7eae6c;
+  --palette-domain-07:#aedec6;
+  --palette-domain-08:#60f0ff;
+  --palette-domain-09:#00bafc;
+  --palette-domain-10:#0084f0;
+  --palette-domain-11:#846ca8;
+  --palette-domain-12:#cc9cba;
+
+  /* 3b. Column families. */
+  --ct-family-integer:#a8e4f6;
+  --ct-family-decimal:#a2c06c;
+  --ct-family-text:#d8e400;
+  --ct-family-datetime:#9c6c54;
+  --ct-family-boolean:#ffaeba;
+  --ct-family-json:#78729c;
+  --ct-family-binary:#00bafc;
+  --ct-family-uuid:#b496b4;
+  --ct-family-enum:#e43c00;
+  --ct-family-other:#609c84;
+
+  /* 3c. Schema diff statuses. */
+  --sd-added:#6cd4a0;
+  --sd-removed:#d86070;
+  --sd-changed:#c49838;
+
+  /* 3d. Join Matrix cells. Emphasis moves away from the surface, so upwards in lightness here. */
+  --matrix-one-to-one:#94f4ec;
+  --matrix-one-to-one-soft:#38a098;
+  --matrix-one-to-many:#fc9c84;
+  --matrix-one-to-many-soft:#fc3c28;
+  --matrix-unknown:#e0c0ff;
+  --matrix-unknown-soft:#c080fc;
+  --matrix-count-ink:#131718;
+
+  /* 3e. Arc Diagram. */
+  --arc-normal:#389490;
+  --arc-cycle:#fc5034;
+  --arc-isolated:#cc90fc;
+
+  /* 3f. Schema City roads. */
+  --road-declared:#309c94;
+  --road-inferred:#d094fc;
+  --road-cross:#fc5438;
+
+  /* 3g. Schema City hemisphere light. */
+  --city-light-sky:#ffffff;
+  --city-light-ground:#849396;
+}

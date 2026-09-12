@@ -1,0 +1,59 @@
+version: 2
+
+# Policy. The explorer's lockfile is pinned deliberately: the offline artifact is a
+# single 2 MB file whose bundle contents are asserted by tests, so a dependency change
+# is a reviewed change, not a routine one. Minor and patch updates are grouped into one
+# pull request per week. Major updates to the runtime dependencies are ignored here and
+# handled as their own work packages, because each one is a migration rather than a bump:
+#   typescript 7 requires ambient declarations for CSS side-effect imports (TS2882)
+#   @types/node must match the Node major the project runs on (22, see .nvmrc)
+#   lucide-react 1.x, react 20+, three, @xyflow/react and @react-three/* change rendering
+# Raise a major deliberately by editing packages/explorer/package.json in a work package
+# with the tests and the feature-document update that prove it still renders.
+updates:
+  - package-ecosystem: npm
+    directory: /packages/explorer
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+      - npm
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      # Pre-1.0 packages where a "minor" is effectively a major, and both gate output
+      # that tests assert: three and its types drive Schema City's WebGL scene, esbuild
+      # produces the single-file offline bundle whose size and contents are budgeted.
+      # Move these only in a work package, once the browser and visual suites are wired
+      # (S02) so a rendering or bundle regression actually fails.
+      - dependency-name: "three"
+      - dependency-name: "@types/three"
+      - dependency-name: "esbuild"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions:
+        patterns:
+          - "*"

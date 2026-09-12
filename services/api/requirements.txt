@@ -1,0 +1,18 @@
+# Pinned runtime install for CI, the container image, and pip-audit. The compatible range lives in
+# pyproject.toml; this file pins the exact versions the tests and the audit run against.
+#
+#   python -m pip install -r services/api/requirements.txt
+#   pip-audit -r services/api/requirements.txt
+sqlalchemy==2.0.52
+alembic==1.19.2
+psycopg[binary]==3.3.5
+# A02, the API foundation. `uvicorn` without the `[standard]` extra: nothing here uses
+# websockets, watchfiles or uvloop, and an unreachable distribution is a pip-audit row with no
+# code path behind it. `cryptography` belongs to A03, which encrypts; A02's only primitive is a
+# hashlib sha256 fingerprint.
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic-settings==2.15.0
+argon2-cffi==25.1.0
+structlog==25.5.0
+slowapi==0.1.10

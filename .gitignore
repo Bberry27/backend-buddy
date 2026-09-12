@@ -1,0 +1,44 @@
+# dependencies and caches
+**/node_modules/
+**/__pycache__/
+*.pyc
+# setuptools writes this into the source tree on `pip install -e packages/profiler`
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+coverage/
+.nyc_output/
+# coverage.py's data file is a SQLite database keyed by absolute source paths,
+# so it leaks the machine it ran on. The guard rejects it by name as well.
+.coverage
+.coverage.*
+coverage.xml
+
+# environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# build outputs
+dist/
+packages/*/dist/
+skill/assets/extensions/dist/
+packages/web/dist/
+
+# QA and test outputs
+.qa/
+outputs/
+playwright-report/
+test-results/
+tests/**/__screenshots__/**/*-actual.png
+
+# private local data: never tracked (see SECURITY.md and docs/architecture/adr/ADR-0007-private-data-and-fixture-policy.md)
+/reference/
+/examples/
+
+# Local admin state: the encrypted connection store and its encryption key.
+# Never committed; losing the key means re-entering passwords, which is correct.
+.backend-buddy/

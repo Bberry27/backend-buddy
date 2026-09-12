@@ -1,0 +1,74 @@
+# The local product, on one port.
+#
+#   npm run up      build if needed, start, verify, print the URL
+#   npm run open    open it in a browser
+#   npm run down    stop
+#
+# Open the URL, add a database connection, and populate its structure. Credentials are
+# entered in the browser and encrypted on disk; no environment variable and no file
+# editing. Connections survive a restart in the `state` volume.
+#
+# To view a snapshot you already have, put the JSON in ./snapshots and it is pre-rendered
+# on start. To explore the bundled synthetic sample, set BB_SERVE_SAMPLE=1.
+#
+# Work package O01 adds the db, migrate, api and worker services once services/api and
+# packages/profiler are complete; see docs/architecture/deployment-architecture.md.
+
+name: backend-buddy
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        # Only the fallback sample. A connection or a mounted snapshot always wins, so
+        # this stays a synthetic fixture and never a private snapshot.
+        SCHEMA: fixtures/schemas/medium.json
+    image: backend-buddy:local
+    # Loopback only. The admin area holds database credentials, so it is never offered to
+    # the local network.
+    ports:
+      - "127.0.0.1:${BB_PORT:-8080}:8080"
+    # A container's own localhost is not the user's machine. This mapping is what lets a
+    # connection reach a database running on the host, and it is required on Linux;
+    # Docker Desktop resolves the name already, so including it is harmless.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Connections and their encryption key, plus the rendered explorer. Persisted so
+      # credentials entered once survive a restart.
+      - state:/state
+      # Optional: drop a snapshot JSON here to pre-render it. Read-only.
+      - ../snapshots:/snapshots:ro
+    environment:
+      # Lets the admin area explain that localhost means the container, not your machine.
+      BB_IN_CONTAINER: "1"
+      # The Host header a browser sends is the published port, which the container cannot
+      # infer, so the allowlist is told about it explicitly.
+      BB_PUBLISHED_PORT: "${BB_PORT:-8080}"
+      # Name a specific mounted snapshot, for example /snapshots/production.json.
+      BB_SCHEMA: "${BB_SCHEMA:-}"
+      # Set to 1 to explore the bundled synthetic sample. Off by default so a fixture is
+      # never mistaken for a real database.
+      BB_SERVE_SAMPLE: "${BB_SERVE_SAMPLE:-0}"
+    read_only: true
+    tmpfs:
+      # Rendering and the certificate the driver writes for a private authority both need
+      # a scratch path. noexec because nothing here should ever run from a writable place.
+      - /tmp:rw,noexec,nosuid,size=64m
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/', timeout=4).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  state:

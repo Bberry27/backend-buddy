@@ -1,0 +1,5 @@
+# Default owner for every path. On a free personal account GitHub does not
+# enforce code-owner review, so this file documents ownership and drives review
+# requests rather than gating merges. Add narrower rules below this line as
+# tracks gain dedicated owners; the last matching pattern wins.
+*       @Bberry27

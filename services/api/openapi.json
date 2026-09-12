@@ -1,0 +1,1313 @@
+{
+  "components": {
+    "schemas": {
+      "Acknowledgement": {
+        "additionalProperties": false,
+        "description": "A state change with nothing to return but the fact that it happened.",
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "Acknowledgement",
+        "type": "object"
+      },
+      "ApiKeyCreateRequest": {
+        "additionalProperties": false,
+        "description": "``POST /workspaces/{workspace_id}/api-keys``.",
+        "properties": {
+          "expiresAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "reviewer",
+              "admin",
+              "owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role"
+        ],
+        "title": "ApiKeyCreateRequest",
+        "type": "object"
+      },
+      "ApiKeyCreated": {
+        "additionalProperties": false,
+        "description": "The one response in the API that carries a credential, and only at creation.",
+        "properties": {
+          "apiKey": {
+            "title": "Apikey",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ApiKeyResponse"
+          }
+        },
+        "required": [
+          "key",
+          "apiKey"
+        ],
+        "title": "ApiKeyCreated",
+        "type": "object"
+      },
+      "ApiKeyResponse": {
+        "additionalProperties": false,
+        "description": "An API key's *metadata*. The secret is not here and cannot be recovered.",
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "keyPrefix": {
+            "title": "Keyprefix",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastusedat"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokedat"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "reviewer",
+              "admin",
+              "owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "title": "Userid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "keyPrefix",
+          "role",
+          "userId",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "lastUsedAt"
+        ],
+        "title": "ApiKeyResponse",
+        "type": "object"
+      },
+      "CsrfResponse": {
+        "additionalProperties": false,
+        "description": "``GET /auth/csrf``: a fresh copy of the session's CSRF token for a reloaded SPA.",
+        "properties": {
+          "csrfToken": {
+            "title": "Csrftoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csrfToken"
+        ],
+        "title": "CsrfResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "description": "``GET /healthz``: this process is running.",
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "Health",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "additionalProperties": false,
+        "description": "``POST /auth/login``.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^@\\s]{1,64}@[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "LoginResponse": {
+        "additionalProperties": false,
+        "description": "What a successful login returns: who you are, where you may go, and the CSRF token.",
+        "properties": {
+          "csrfToken": {
+            "title": "Csrftoken",
+            "type": "string"
+          },
+          "sessionExpiresAt": {
+            "format": "date-time",
+            "title": "Sessionexpiresat",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceResponse"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "user",
+          "workspaces",
+          "csrfToken",
+          "sessionExpiresAt"
+        ],
+        "title": "LoginResponse",
+        "type": "object"
+      },
+      "MeResponse": {
+        "additionalProperties": false,
+        "description": "``GET /users/me``: the caller and their memberships.",
+        "properties": {
+          "credential": {
+            "enum": [
+              "session",
+              "api_key"
+            ],
+            "title": "Credential",
+            "type": "string"
+          },
+          "passwordPolicy": {
+            "$ref": "#/components/schemas/PasswordSpecification",
+            "default": {
+              "commonPasswordCheck": true,
+              "maximumLength": 1024,
+              "minimumLength": 12
+            }
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceResponse"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "user",
+          "workspaces",
+          "credential"
+        ],
+        "title": "MeResponse",
+        "type": "object"
+      },
+      "MemberAddRequest": {
+        "additionalProperties": false,
+        "description": "``POST /workspaces/{workspace_id}/members``: grant an existing account a role.\n\nA02 creates no accounts beyond the first owner (``python -m app.bootstrap``), so the address\nmust already exist; an unknown address answers 404 like any other absent target, which also\nmeans this route cannot be used to find out whether an address has an account.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^@\\s]{1,64}@[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "reviewer",
+              "admin",
+              "owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "role"
+        ],
+        "title": "MemberAddRequest",
+        "type": "object"
+      },
+      "MemberResponse": {
+        "additionalProperties": false,
+        "description": "One membership of a workspace.",
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Displayname"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "reviewer",
+              "admin",
+              "owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "title": "Userid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "email",
+          "displayName",
+          "role",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "MemberResponse",
+        "type": "object"
+      },
+      "MemberRoleRequest": {
+        "additionalProperties": false,
+        "description": "``PUT /workspaces/{workspace_id}/members/{user_id}``.",
+        "properties": {
+          "role": {
+            "enum": [
+              "viewer",
+              "reviewer",
+              "admin",
+              "owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "MemberRoleRequest",
+        "type": "object"
+      },
+      "PasswordSpecification": {
+        "additionalProperties": false,
+        "description": "The password policy, so a client can state the rules before a user types (F20 B-numbered).\n\nAdvertising the minimum is not a disclosure; leaving a user to discover it by rejection is\njust bad manners.",
+        "properties": {
+          "commonPasswordCheck": {
+            "default": true,
+            "title": "Commonpasswordcheck",
+            "type": "boolean"
+          },
+          "maximumLength": {
+            "default": 1024,
+            "title": "Maximumlength",
+            "type": "integer"
+          },
+          "minimumLength": {
+            "default": 12,
+            "title": "Minimumlength",
+            "type": "integer"
+          }
+        },
+        "title": "PasswordSpecification",
+        "type": "object"
+      },
+      "Readiness": {
+        "additionalProperties": false,
+        "description": "``GET /readyz``: the three checks from ``deployment-architecture.md`` section 6.\n\n``reason`` is a short, fixed phrase when a check fails -- never a driver message, a URL, or a\nfingerprint (RK-08 says \"reports a fingerprint mismatch with a redacted reason\").",
+        "properties": {
+          "database": {
+            "title": "Database",
+            "type": "boolean"
+          },
+          "masterKey": {
+            "title": "Masterkey",
+            "type": "boolean"
+          },
+          "migrations": {
+            "title": "Migrations",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "database",
+          "migrations",
+          "masterKey"
+        ],
+        "title": "Readiness",
+        "type": "object"
+      },
+      "RevokeAllResponse": {
+        "additionalProperties": false,
+        "description": "``POST /auth/sessions/revoke-all``.",
+        "properties": {
+          "revokedSessions": {
+            "title": "Revokedsessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revokedSessions"
+        ],
+        "title": "RevokeAllResponse",
+        "type": "object"
+      },
+      "UserResponse": {
+        "additionalProperties": false,
+        "description": "An account, as the API returns it. No hash, no counter, no session.",
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Displayname"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "isActive": {
+            "title": "Isactive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "displayName",
+          "isActive",
+          "createdAt"
+        ],
+        "title": "UserResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkspaceCreateRequest": {
+        "additionalProperties": false,
+        "description": "``POST /workspaces``.",
+        "properties": {
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ],
+        "title": "WorkspaceCreateRequest",
+        "type": "object"
+      },
+      "WorkspaceResponse": {
+        "additionalProperties": false,
+        "description": "A workspace and, when the caller is a member, the role they hold in it.",
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "viewer",
+                  "reviewer",
+                  "admin",
+                  "owner"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "createdAt"
+        ],
+        "title": "WorkspaceResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "\nMetadata store, accounts, workspaces, and roles for Backend Buddy.\n\nThe product never discovers or connects to a database implicitly, and never to production to make a view look populated. Live access uses only a connection the user explicitly selected, opened read-only with bounded queries, and a metadata request never authorizes scanning customer rows.\n\nAuthentication is either a session cookie, obtained from `POST /auth/login` and accompanied by\nthe `X-CSRF-Token` header on every state-changing request, or `Authorization: Bearer` with an API\nkey, which is exempt from CSRF because it carries no ambient credential. Every route declares a\nminimum role; `x-backend-buddy-role` on each operation states which.\n",
+    "title": "Backend Buddy API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/auth/csrf": {
+      "get": {
+        "description": "Rotate this session's CSRF token, set the readable cookie, and return the token.",
+        "operationId": "csrf_auth_csrf_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mint a fresh CSRF token for the current session",
+        "tags": [
+          "authentication"
+        ],
+        "x-backend-buddy-role": "authenticated"
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "description": "Authenticate and start a session.",
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exchange an email address and password for a session",
+        "tags": [
+          "authentication"
+        ],
+        "x-backend-buddy-role": "public"
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "description": "Revoke this session. Idempotent, and harmless for an API-key caller.",
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "End the current session and clear its cookies",
+        "tags": [
+          "authentication"
+        ],
+        "x-backend-buddy-role": "authenticated"
+      }
+    },
+    "/auth/sessions/revoke-all": {
+      "post": {
+        "description": "Revoke every session of the caller's account, including the one making the request.\n\nThis is the control a user reaches for when they think a device is compromised, so it takes\neffect immediately and everywhere, and it does not spare the caller.",
+        "operationId": "revoke_all_auth_sessions_revoke_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeAllResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Revoke every session of the current account",
+        "tags": [
+          "authentication"
+        ],
+        "x-backend-buddy-role": "authenticated"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Answer 200 as long as this process can serve a request at all.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness: the process is running",
+        "tags": [
+          "health"
+        ],
+        "x-backend-buddy-role": "public"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Run the three readiness checks and answer 200 or 503.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Readiness: store reachable, migrations at head, master key matching",
+        "tags": [
+          "health"
+        ],
+        "x-backend-buddy-role": "public"
+      }
+    },
+    "/users/me": {
+      "get": {
+        "description": "Who is calling, where they may go, and the password rules.",
+        "operationId": "me_users_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The current principal and its workspaces",
+        "tags": [
+          "users"
+        ],
+        "x-backend-buddy-role": "authenticated"
+      }
+    },
+    "/workspaces": {
+      "get": {
+        "description": "Every workspace the caller is a member of, with the role held in each.\n\nAn API key sees only the workspace recorded on it, at the role recorded on it.",
+        "operationId": "list_workspaces_workspaces_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceResponse"
+                  },
+                  "title": "Response List Workspaces Workspaces Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Workspaces the caller may open",
+        "tags": [
+          "workspaces"
+        ],
+        "x-backend-buddy-role": "authenticated"
+      },
+      "post": {
+        "description": "Create a workspace with the caller as its owner.",
+        "operationId": "create_workspace_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The slug is already in use"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a workspace and become its owner",
+        "tags": [
+          "workspaces"
+        ],
+        "x-backend-buddy-role": "authenticated"
+      }
+    },
+    "/workspaces/{workspace_id}": {
+      "get": {
+        "description": "The workspace, with the caller's role. A workspace they cannot see answers 404.",
+        "operationId": "get_workspace_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such workspace for this caller"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One workspace",
+        "tags": [
+          "workspaces"
+        ],
+        "x-backend-buddy-role": "viewer"
+      }
+    },
+    "/workspaces/{workspace_id}/api-keys": {
+      "get": {
+        "description": "Every key that can act in this workspace, newest first. No secret is included.",
+        "operationId": "list_api_keys_workspaces__workspace_id__api_keys_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyResponse"
+                  },
+                  "title": "Response List Api Keys Workspaces  Workspace Id  Api Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "API keys of this workspace",
+        "tags": [
+          "api-keys"
+        ],
+        "x-backend-buddy-role": "admin"
+      },
+      "post": {
+        "description": "Mint a key for the calling account, at or below the caller's own role.",
+        "operationId": "create_api_key_workspaces__workspace_id__api_keys_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create an API key and return its secret once",
+        "tags": [
+          "api-keys"
+        ],
+        "x-backend-buddy-role": "admin"
+      }
+    },
+    "/workspaces/{workspace_id}/api-keys/{api_key_id}": {
+      "delete": {
+        "description": "Revoke a key. Idempotent; a key from another workspace answers 404.",
+        "operationId": "revoke_api_key_workspaces__workspace_id__api_keys__api_key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "api_key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Api Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such key in this workspace"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke an API key",
+        "tags": [
+          "api-keys"
+        ],
+        "x-backend-buddy-role": "admin"
+      }
+    },
+    "/workspaces/{workspace_id}/members": {
+      "get": {
+        "description": "Every membership of the workspace. Readable by any member: roles are not a secret.",
+        "operationId": "list_members_workspaces__workspace_id__members_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemberResponse"
+                  },
+                  "title": "Response List Members Workspaces  Workspace Id  Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Members of a workspace and their roles",
+        "tags": [
+          "workspaces"
+        ],
+        "x-backend-buddy-role": "viewer"
+      },
+      "post": {
+        "description": "Add a member.\n\nThe account must already exist: A02 creates none beyond the first owner, and an unknown\naddress answers 404 -- which also means this route cannot be used to discover whether an\naddress has an account here.",
+        "operationId": "add_member_workspaces__workspace_id__members_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such account"
+          },
+          "409": {
+            "description": "The account is already a member"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant an existing account a role in this workspace",
+        "tags": [
+          "workspaces"
+        ],
+        "x-backend-buddy-role": "admin"
+      }
+    },
+    "/workspaces/{workspace_id}/members/{user_id}": {
+      "put": {
+        "description": "Change one member's role, then rotate that member's sessions.",
+        "operationId": "set_member_role_workspaces__workspace_id__members__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such member"
+          },
+          "409": {
+            "description": "The change would leave no owner"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change a member role (rotates that member sessions)",
+        "tags": [
+          "workspaces"
+        ],
+        "x-backend-buddy-role": "admin"
+      }
+    }
+  }
+}

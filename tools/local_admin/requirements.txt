@@ -1,0 +1,23 @@
+# Runtime dependencies of the local admin area, which is what the container serves.
+#
+# These were installed by deploy/Dockerfile and declared nowhere, so a developer met them by
+# watching an import fail and scripts/generate_notices.mjs never saw them -- which left
+# cryptography absent from THIRD_PARTY_NOTICES.md while shipping inside the image. The Dockerfile
+# now installs from this file, so the declaration and the image cannot drift apart.
+#
+#   python -m pip install -r tools/local_admin/requirements.txt
+#   pip-audit -r tools/local_admin/requirements.txt
+#
+# Ranges rather than exact pins, matching packages/explorer/server/requirements.txt: these are
+# operator-installed libraries reached through their stable public APIs, not a locked build.
+# psycopg must stay identical to the spec in packages/explorer/server/requirements.txt --
+# generate_notices.mjs refuses one package pinned two ways across files.
+
+# Reaches the customer's PostgreSQL for catalog introspection, row counts and column statistics.
+psycopg[binary]>=3.2,<4
+# Encrypts the stored connection password (AES-256-GCM) under a key held only on this machine.
+# The floor is a security floor, not a compatibility one: 46.0.7 carries six known advisories
+# (PYSEC-2026-3552/3553/3554 and GHSA-537c-gmf6-5ccf), the last of which is fixed in 50.0.0, and
+# the previous `<47` ceiling could not reach any fix. The AEAD API this uses has been stable since
+# 2.0, so the jump costs nothing. Do not lower the floor without re-running pip-audit.
+cryptography>=50,<51

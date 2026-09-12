@@ -1,0 +1,7 @@
+{
+  "folders": [{ "path": "." }],
+  "settings": {
+    "files.exclude": { "**/__pycache__": true },
+    "search.exclude": { "**/node_modules": true, "**/dist": true, "skill/assets/extensions/src": true, "skill/assets/extensions/server": true }
+  }
+}

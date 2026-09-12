@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=70.0.0,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bb-profiler"
+version = "0.1.0"
+description = "SchemaGraph contract validation and bounded read-only profiling for Backend Buddy"
+requires-python = ">=3.13,<4"
+dependencies = [
+  # Structural validation of packages/contract/schema-graph.v1.json. The semantic rules stay in
+  # normalize(); see docs/architecture/adr/ADR-0003-backend-fastapi-and-contract-oracle.md.
+  "jsonschema>=4.23.0,<5",
+]
+
+[project.optional-dependencies]
+# Only needed to profile PostgreSQL. SQLite profiling and every test here run without it.
+postgresql = ["psycopg[binary]>=3.2,<4"]
+
+[tool.setuptools.packages.find]
+include = ["bb_profiler*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["bb_profiler", "tests"]
+
+# jsonschema ships no stubs; build_explorer and schema_profiler are imported by path from
+# skill/scripts and packages/explorer/server, which are not packages on the module path.
+[[tool.mypy.overrides]]
+module = ["jsonschema", "jsonschema.*", "build_explorer", "schema_profiler"]
+ignore_missing_imports = true

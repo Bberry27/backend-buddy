@@ -1,0 +1,60 @@
+.fanout-view { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); color: var(--ink); font: 12px/1.4 system-ui, sans-serif; letter-spacing: 0; }
+.fanout-view * { box-sizing: border-box; }
+.fanout-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.fanout-toolbar label, .fanout-live-form label { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--muted); }
+.fanout-root-label { flex: 1 1 220px; max-width: 460px; }
+.fanout-view button, .fanout-view select, .fanout-view input { min-height: 32px; font: inherit; letter-spacing: 0; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; background: var(--raised); }
+.fanout-view select, .fanout-view input { max-width: 100%; min-width: 0; padding: 5px 8px; }
+.fanout-view button { cursor: pointer; padding: 5px 10px; }
+.fanout-view button:disabled { opacity: .5; cursor: default; }
+.fanout-view button:focus-visible, .fanout-view input:focus-visible, .fanout-view select:focus-visible, .fanout-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.fanout-view button:hover:not(:disabled) { border-color: var(--accent); }
+.fanout-modes { display: flex; max-width: 100%; gap: 0; }
+.fanout-modes button { white-space: normal; }
+.fanout-modes button:first-child { border-radius: 4px 0 0 4px; }
+.fanout-modes button:last-child { border-radius: 0 4px 4px 0; }
+.fanout-modes button[aria-pressed=true] { color: var(--accent); border-color: var(--accent); background: var(--bg); }
+.fanout-view .fanout-icon-button { width: 32px; padding: 6px; display: grid; place-items: center; flex: 0 0 32px; }
+.fanout-availability, .fanout-error { margin: 0; padding: 7px 12px; overflow-wrap: anywhere; }
+.fanout-availability { color: var(--muted); }
+.fanout-error { border-left: 3px solid var(--danger); background: var(--panel); }
+.fanout-live-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.fanout-live-form label { flex: 1 1 230px; max-width: 560px; overflow-wrap: anywhere; }
+.fanout-live-form button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.fanout-live-limit { color: var(--muted); padding: 6px 0; }
+.fanout-legend { display: flex; flex-wrap: wrap; gap: 5px 18px; padding: 8px 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.fanout-legend span { min-width: 0; overflow-wrap: anywhere; }
+.fanout-sample { display: inline-block; width: 23px; border-top: 5px solid var(--accent); margin-right: 5px; vertical-align: middle; }
+.fanout-sample-unknown { border-top: 2px dashed var(--muted); }
+.fanout-notices { padding: 7px 12px; background: var(--raised); border-bottom: 1px solid var(--line); max-height: 100px; overflow: auto; }
+.fanout-notices p { margin: 2px 0; }
+.fanout-scroll { flex: 1 1 auto; min-height: 80px; min-width: 0; overflow: auto; overscroll-behavior: contain; }
+.fanout-canvas { position: relative; isolation: isolate; }
+.fanout-ribbons { position: absolute; inset: 0; z-index: -1; }
+.fanout-quantitative { stroke: var(--accent); opacity: .55; }
+.fanout-structural { stroke: var(--muted); stroke-dasharray: 4 4; opacity: .65; }
+.fanout-ratio-label { font-size: 11px; fill: var(--ink); stroke: var(--bg); stroke-width: 5px; paint-order: stroke; stroke-linejoin: round; }
+.fanout-label-guide { stroke: var(--muted); stroke-width: 1px; stroke-dasharray: 2 3; }
+.fanout-node { position: absolute; height: 72px; display: flex; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; background: var(--panel); overflow: hidden; }
+.fanout-node-partial { border-left-style: dashed; }
+.fanout-view .fanout-table-button { flex: 1; min-width: 0; border: 0; border-radius: 0; background: transparent; text-align: left; padding: 7px 8px; }
+.fanout-table-name, .fanout-node-meta, .fanout-count { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.fanout-table-name { font-weight: 650; }
+.fanout-node-meta { color: var(--muted); font-size: 10px; }
+.fanout-count { font-variant-numeric: tabular-nums; }
+.fanout-view .fanout-node-toggle { flex: 0 0 28px; width: 28px; border: 0; border-left: 1px solid var(--line); border-radius: 0; padding: 4px; background: transparent; }
+.fanout-node-toggle:disabled { visibility: hidden; }
+.fanout-empty { display: grid; place-items: center; min-height: 200px; padding: 24px; color: var(--muted); }
+.fanout-no-links { margin: 0; padding: 0 24px 20px; color: var(--muted); }
+.fanout-ratio-table { border-collapse: collapse; width: 100%; min-width: 540px; table-layout: fixed; color: var(--ink); font: inherit; }
+.fanout-ratio-table caption { text-align: left; padding: 8px 12px; font-weight: 650; border-top: 1px solid var(--line); }
+.fanout-ratio-table th, .fanout-ratio-table td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.fanout-ratio-table th { color: var(--muted); background: var(--panel); font-weight: 500; }
+.fanout-ratio-table th:nth-child(3) { width: 100px; }
+.fanout-view .fanout-ratio-table button { padding: 0; min-height: 24px; border: 0; background: transparent; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
+.fanout-ratio-table small { display: block; color: var(--muted); }
+.fanout-spin { animation: fanout-spin 1s linear infinite; }
+@keyframes fanout-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) { .fanout-toolbar { gap: 8px; padding: 8px; } .fanout-root-label { flex-basis: calc(100% - 72px); max-width: none; } .fanout-legend { font-size: 11px; padding: 7px 8px; } .fanout-modes { flex: 1; } .fanout-modes button { flex: 1; } }
+@media (max-height: 540px) { .fanout-view { overflow-y: auto; } .fanout-scroll { flex-shrink: 0; min-height: 180px; } }
+@media (prefers-reduced-motion: reduce) { .fanout-spin { animation: none; } }

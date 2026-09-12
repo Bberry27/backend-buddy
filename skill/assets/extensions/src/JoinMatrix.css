@@ -1,0 +1,21 @@
+.schema-matrix { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); color: var(--ink); font: inherit; font-size: 12px; letter-spacing: 0; }
+.schema-matrix * { box-sizing: border-box; }
+.schema-matrix-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); flex: 0 0 auto; }
+.schema-matrix-toolbar strong { font-size: 14px; }
+.schema-matrix-toolbar > span { color: var(--muted); font-size: 11px; }
+.schema-matrix-toolbar label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.schema-matrix-toolbar select { max-width: 200px; min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: 5px; background: var(--raised); color: var(--ink); font: inherit; }
+.schema-matrix-toolbar input { accent-color: var(--accent); }
+.schema-matrix-viewport { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.schema-matrix-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.schema-matrix-space { position: relative; }
+.schema-matrix-surface { position: absolute; overflow: hidden; }
+.schema-matrix-surface canvas, .schema-matrix-surface svg { display: block; cursor: crosshair; }
+.schema-matrix-detail { flex: 0 0 72px; display: grid; align-content: start; gap: 4px; height: 72px; min-height: 72px; min-width: 0; overflow: auto; padding: 7px 12px; border-top: 1px solid var(--line); background: var(--panel); font-size: 11px; overflow-wrap: anywhere; }
+.schema-matrix-detail span { color: var(--muted); }
+.schema-matrix-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 7px 12px; max-height: 70px; overflow: auto; flex: 0 0 auto; color: var(--muted); border-top: 1px solid var(--line); font-size: 10px; }
+.schema-matrix-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.schema-matrix-legend i { width: 10px; height: 10px; flex-shrink: 0; }
+.schema-matrix-empty { padding: 24px 12px; color: var(--muted); }
+.schema-matrix-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 440px) { .schema-matrix-toolbar { gap: 6px 10px; padding: 7px 8px; } .schema-matrix-toolbar select { max-width: 170px; } }

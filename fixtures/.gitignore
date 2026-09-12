@@ -1,0 +1,2 @@
+# Generated only with `node scripts/generate-fixtures.mjs --large`; above the 2 MB repository cap (CTQ-14).
+schemas/large.json

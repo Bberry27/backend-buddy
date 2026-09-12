@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON: python3
+
+jobs:
+  explorer:
+    name: Explorer typecheck and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/explorer/package-lock.json
+
+      - name: Restore locked dependencies
+        run: npm run restore
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm --prefix packages/explorer test
+
+  python:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      # Node only to run the npm script; the Python suites need no explorer dependency, so this
+      # job deliberately does not restore them.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # bb_profiler.contract imports jsonschema at module scope and the admin area imports psycopg
+      # and cryptography, so those suites cannot even import without these. Versions live in the
+      # requirements files, which are also what the notices generator and pip-audit read.
+      - name: Install Python dependencies
+        run: |
+          python -m pip install -r packages/profiler/requirements.txt
+          python -m pip install -r tools/local_admin/requirements.txt
+
+      # One invocation for everyone: scripts/project.mjs PYTHON_TEST_SUITES owns the suite list.
+      # Restating it here drifted twice -- packages/profiler/tests was missing altogether and
+      # skill/scripts was pinned to test_renderer.py, which excluded the S01 security regressions.
+      - name: Run Python test suites
+        run: npm run test:python
+
+  artifact:
+    name: Offline artifact build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/explorer/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Restore locked dependencies
+        run: npm run restore
+
+      - name: Build bundle, skill mirror, and artifact
+        run: npm run build
+
+      - name: Artifact exists and is non-empty
+        run: test -s dist/backend-buddy.html
+
+      - name: Artifact keeps the offline CSP
+        run: grep -q "connect-src 'none'" dist/backend-buddy.html
+
+  guard:
+    name: Private data guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Run guard
+        run: node scripts/private_data_guard.mjs
+
+  scripts:
+    name: Script tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/explorer/package-lock.json
+
+      # scripts/generate-fixtures.test.mjs validates every fixture with the TypeScript
+      # modules in packages/explorer/src through tsx; without the locked dependencies those
+      # subtests fail under CI (they skip only outside CI), so restore first.
+      - name: Restore locked dependencies
+        run: npm run restore
+
+      # One invocation for everyone: package.json "test:scripts" owns the glob
+      # (node --test "scripts/**/*.test.mjs"; a bare directory argument fails on Node 22).
+      - name: Run script tests
+        run: npm run test:scripts

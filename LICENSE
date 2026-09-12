@@ -1,0 +1,167 @@
+DRAFT — PENDING LEGAL REVIEW
+============================
+This license text is a working draft prepared by the Licensor. It has not been
+reviewed or approved by legal counsel, and its terms may change before it is
+finalised. Until this header is removed, treat the terms below as the intended
+licensing position of the Licensor, not as a final legal instrument.
+Confirm the Licensor's full legal name before this header is removed; a
+copyright notice naming a legal person is stronger to enforce than a handle.
+
+
+RELATIONAL MAP AND SCHEMA REVIEW
+PROPRIETARY COMMERCIAL LICENSE
+
+Copyright (c) 2026 Bberry27. All rights reserved.
+
+
+1. DEFINITIONS
+
+   "Software" means the Backend Buddy source code, compiled
+   bundles, generated artifacts, documentation, fixtures, and any other
+   materials made available with this license, including any updates that
+   the Licensor provides under it.
+
+   "Licensor" means Bberry27.
+
+   "You" means the individual or legal entity accessing or using the Software.
+
+   "License Agreement" means a written agreement, signed by an authorised
+   representative of the Licensor, that grants You rights to the Software
+   beyond those set out in Section 3.
+
+
+2. OWNERSHIP
+
+   The Software is licensed, not sold. The Licensor and its licensors retain
+   all right, title, and interest in and to the Software, including all
+   intellectual property rights. No rights are granted to You except as
+   expressly stated in this license or in a License Agreement.
+
+
+3. LIMITED EVALUATION GRANT
+
+   Until a License Agreement is in effect between You and the Licensor, the
+   Licensor grants You a limited, non-exclusive, non-transferable,
+   non-sublicensable, revocable right to install and use the Software solely
+   to evaluate its suitability for Your internal business purposes, and solely
+   on systems that You control. Evaluation use does not include production
+   use, use on behalf of third parties, or use to provide a service to others.
+
+   Once a License Agreement is in effect, its terms govern Your use of the
+   Software and prevail over this license wherever the two differ.
+
+
+4. RESTRICTIONS
+
+   Except as expressly permitted in writing by the Licensor, You must not:
+
+   a. copy, distribute, publish, sell, rent, lease, lend, sublicense, host,
+      or otherwise make the Software or any part of it available to any third
+      party;
+
+   b. reverse engineer, decompile, disassemble, or otherwise attempt to derive
+      the source code, algorithms, or structure of any part of the Software
+      that is not provided to You in source form, except to the limited extent
+      that applicable law expressly prohibits this restriction;
+
+   c. modify, translate, or create derivative works of the Software, other
+      than configuration and integration work that a License Agreement
+      expressly permits;
+
+   d. remove, alter, or obscure any copyright, trademark, or other proprietary
+      notice in or on the Software;
+
+   e. use the Software to build a competing product or service, or publish
+      benchmarks of the Software without the Licensor's prior written consent;
+
+   f. use the Software in violation of applicable law, or against systems or
+      data that You are not authorised to access.
+
+
+5. THIRD-PARTY COMPONENTS
+
+   The Software incorporates open-source and other third-party components
+   that are licensed under their own terms. Those components and their license
+   texts are listed in the file THIRD_PARTY_NOTICES.md distributed with the
+   Software. This license does not alter Your rights or obligations under
+   those third-party licenses, and to the extent of any conflict, the
+   third-party license governs the component that it covers.
+
+
+6. CONFIDENTIALITY
+
+   The Software, including its source code and any non-public documentation,
+   is confidential information of the Licensor. You must protect it with at
+   least the degree of care that You use for Your own confidential information
+   of similar importance, and in no event less than reasonable care. You must
+   not disclose it to anyone other than Your employees and contractors who
+   need access for the permitted evaluation and who are bound by
+   confidentiality obligations at least as protective as those in this
+   Section.
+
+
+7. FEEDBACK
+
+   If You provide suggestions, bug reports, or other feedback about the
+   Software, You grant the Licensor a perpetual, irrevocable, worldwide,
+   royalty-free right to use that feedback for any purpose without obligation
+   to You.
+
+
+8. TERM AND TERMINATION
+
+   This license is effective until terminated. It terminates automatically if
+   You breach any of its terms. The Licensor may also terminate the evaluation
+   grant in Section 3 at any time by written notice. On termination You must
+   stop using the Software and destroy all copies in Your possession or
+   control. Sections 2, 4, 5, 6, 7, 9, 10, 11, and 12 survive termination.
+
+
+9. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF
+   ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING WITHOUT
+   LIMITATION ANY WARRANTY OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE, TITLE, NON-INFRINGEMENT, OR ACCURACY, AND ANY WARRANTY THAT THE
+   SOFTWARE WILL BE ERROR-FREE OR OPERATE WITHOUT INTERRUPTION. THE SOFTWARE
+   PRODUCES ANALYSES AND RECOMMENDATIONS THAT ARE REVIEW CANDIDATES, NOT
+   VERDICTS. YOU ARE SOLELY RESPONSIBLE FOR DECISIONS MADE ON THE BASIS OF ITS
+   OUTPUT AND FOR THE DATABASES AND DATA TO WHICH YOU CONNECT IT.
+
+
+10. LIMITATION OF LIABILITY
+
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL THE
+   LICENSOR OR ITS SUPPLIERS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+   CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS,
+   REVENUE, DATA, OR GOODWILL, ARISING OUT OF OR RELATING TO THE SOFTWARE OR
+   THIS LICENSE, HOWEVER CAUSED AND UNDER ANY THEORY OF LIABILITY, EVEN IF
+   ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THE LICENSOR'S TOTAL AGGREGATE
+   LIABILITY ARISING OUT OF OR RELATING TO THIS LICENSE WILL NOT EXCEED THE
+   GREATER OF THE AMOUNTS YOU PAID FOR THE SOFTWARE IN THE TWELVE MONTHS
+   BEFORE THE CLAIM AND [LIABILITY CAP AMOUNT]. SOME JURISDICTIONS DO NOT
+   ALLOW CERTAIN EXCLUSIONS OR LIMITATIONS, SO SOME OF THE ABOVE MAY NOT APPLY
+   TO YOU.
+
+
+11. GOVERNING LAW AND VENUE
+
+   This license is governed by the laws of [GOVERNING JURISDICTION], without
+   regard to its conflict-of-laws rules. Any dispute arising out of or
+   relating to this license will be brought exclusively in the courts located
+   in [VENUE], and You consent to the personal jurisdiction of those courts.
+   The United Nations Convention on Contracts for the International Sale of
+   Goods does not apply.
+
+
+12. GENERAL
+
+   This license is the entire agreement between You and the Licensor about
+   evaluation use of the Software and supersedes all prior understandings on
+   that subject. If any provision is held unenforceable, the remainder stays
+   in effect and that provision is enforced to the maximum extent permitted.
+   The Licensor's failure to enforce a provision is not a waiver of it. You
+   may not assign this license without the Licensor's prior written consent.
+
+
+To obtain a License Agreement, contact the Licensor at [LICENSING CONTACT].

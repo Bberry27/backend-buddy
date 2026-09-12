@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Buddy"
+  short_description: "Interactive ERDs, entity indexes, and schema review"
+  default_prompt: "Use $backend-buddy to create or update this project Backend Buddy documentation."

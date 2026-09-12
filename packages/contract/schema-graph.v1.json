@@ -1,0 +1,534 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backend-buddy.example/contract/schema-graph.v1.json",
+  "title": "SchemaGraph contract v1",
+  "description": "Machine-readable form of the canonical schema contract (docs/architecture/schema-graph-contract.md, Part A and Part B). This file carries structural rules only: types, enumerations, required fields, length caps and numeric bounds. The semantic rules (unique ids, declared-target resolution, duplicate pairs, composite-group consistency, inferred dedupe) live in normalize() in skill/scripts/build_explorer.py, which stays the single oracle and is never reimplemented. Unknown fields are ignored rather than rejected, so a minor version may add fields without breaking an older reader. Caveat references are ids only; the wording lives in docs/reference/caveats.md.",
+  "$ref": "#/$defs/SchemaGraph",
+  "$defs": {
+    "scalar": {
+      "title": "Bounded JSON scalar",
+      "description": "A single retained value. Strings are capped at MAX_SCALAR_LENGTH (256) characters, the same bound the profiler applies before a value leaves the database. See C05.",
+      "type": ["string", "number", "boolean", "null"],
+      "maxLength": 256
+    },
+    "legacyBoolean": {
+      "title": "Boolean flag with the legacy string and integer forms",
+      "description": "A boolean flag as emitted by adapters over the life of the contract: a JSON boolean, the legacy strings accepted by boolean() in build_explorer.py, the integers 0 and 1, or null for unknown. normalize() coerces every form to a JSON boolean before a view sees it.",
+      "anyOf": [
+        {"type": ["boolean", "null"]},
+        {"type": "string", "enum": ["", "True", "False", "true", "false"]},
+        {"type": "integer", "enum": [0, 1]}
+      ]
+    },
+    "identifier": {
+      "title": "Physical or display identifier",
+      "description": "An identifier keeps every character it carries; only the length cap applies (NAME_CAP, 256). No character-set pattern is imposed under v1, so a table id may contain dots and other separators.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "displayText": {
+      "title": "Short display string",
+      "description": "A single-line display value, capped at NAME_CAP (256) characters. normalize() strips control characters and bidi overrides and rejects an over-length value rather than truncating it.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "longText": {
+      "title": "Long display string",
+      "description": "A multi-line display value, capped at TEXT_CAP (4096) characters. Shown escaped and never executed.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "SchemaProject": {
+      "title": "Project identity",
+      "description": "Identity of the schema under review. The key scopes browser storage and review decisions and must stay stable for one project environment. See C13.",
+      "type": "object",
+      "x-typescript": {"name": "SchemaProject", "required": ["name", "key", "dialect"]},
+      "required": ["name", "key"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "description": "Human-readable project name. Rendered escaped in the header, the provenance footer and the artifact title.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "key": {
+          "description": "Stable lowercase key, matching the character set normalize() enforces. Two environments with identical table names must not share a key.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "dialect": {
+          "description": "SQL dialect of the source. Defaults to unknown, which turns generated SQL off. Generated SQL is supported for postgresql and sqlite only, and is always a draft the product never executes. See C04.",
+          "$ref": "#/$defs/displayText"
+        }
+      }
+    },
+    "SchemaSource": {
+      "title": "Evidence provenance",
+      "description": "Where the graph came from and how far its evidence reaches. normalize() supplies a default for every field so the provenance footer is never blank; adapters should still emit the real values. See C09.",
+      "type": "object",
+      "x-typescript": {"name": "SchemaSource", "required": [], "indexSignature": "unknown"},
+      "additionalProperties": true,
+      "properties": {
+        "file": {
+          "description": "Path or identifier of the evidence source.",
+          "$ref": "#/$defs/longText"
+        },
+        "commit": {
+          "description": "Verified reference or snapshot id. The provenance footer shows its first eight characters.",
+          "$ref": "#/$defs/displayText"
+        },
+        "sha256": {
+          "description": "Hash of the source bytes, or a recorded placeholder.",
+          "$ref": "#/$defs/displayText"
+        },
+        "generated": {
+          "description": "When the graph was produced.",
+          "$ref": "#/$defs/displayText"
+        },
+        "basis": {
+          "description": "What the evidence covers and what it does not. Shown as the provenance tooltip. See C09.",
+          "$ref": "#/$defs/longText"
+        }
+      }
+    },
+    "ColumnProfiling": {
+      "title": "Column statistics from a bounded sample",
+      "description": "Per-column observations from an explicitly requested, read-only, capped sample. Absent fields are unknown, never zero. See C01 and C05.",
+      "type": "object",
+      "x-typescript": {"name": "ColumnProfiling", "required": []},
+      "additionalProperties": true,
+      "properties": {
+        "nullFraction": {
+          "description": "Observed fraction of NULL values in the sample, or null when the sample was empty.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "x-tsType": "number"
+        },
+        "distinctCount": {
+          "description": "Distinct non-NULL values observed in the sample. A sample distinct count is not a database uniqueness guarantee. See C05.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "min": {
+          "description": "Smallest value observed in the sample, as a bounded scalar. Extremes can be sensitive and are never published implicitly.",
+          "$ref": "#/$defs/scalar",
+          "x-tsType": "unknown"
+        },
+        "max": {
+          "description": "Largest value observed in the sample, as a bounded scalar.",
+          "$ref": "#/$defs/scalar",
+          "x-tsType": "unknown"
+        },
+        "sampleSize": {
+          "description": "Rows examined for this column.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "sampled": {
+          "description": "True when the statistics come from a sample rather than the whole table. See C05.",
+          "type": "boolean"
+        },
+        "scope": {
+          "description": "Scope label for the statistics, for example sampled or table.",
+          "$ref": "#/$defs/displayText"
+        },
+        "sampleValues": {
+          "description": "At most three distinct, non-NULL, bounded scalars, retained only when the caller opted in. Exports strip them unless the exporter opts in as well.",
+          "type": "array",
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/scalar"},
+          "x-tsType": "unknown[]"
+        }
+      }
+    },
+    "SchemaColumn": {
+      "title": "Column",
+      "description": "One column of a table. Only name is required on the wire; normalize() supplies the defaults the views rely on, so the generated TypeScript type describes the normalized document.",
+      "type": "object",
+      "x-typescript": {
+        "name": "SchemaColumn",
+        "required": ["name", "type", "pk", "fk", "nullable", "index", "unique"]
+      },
+      "required": ["name"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "description": "Physical column name, unique within its table.",
+          "$ref": "#/$defs/identifier"
+        },
+        "type": {
+          "description": "Declared type as written in the evidence source. An unknown type stays Unknown rather than being guessed.",
+          "$ref": "#/$defs/displayText"
+        },
+        "pk": {
+          "description": "Primary-key membership flag. An explicit primaryKey array on the table takes precedence. A column named id is not a primary key without evidence.",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "boolean"
+        },
+        "fk": {
+          "description": "Display-only foreign-key target text. Actual relationships come from links; a link is never invented from this text. See C07.",
+          "$ref": "#/$defs/displayText"
+        },
+        "nullable": {
+          "description": "Tri-state nullability: an empty string means unknown, otherwise True or False. Booleans and the legacy string forms are accepted on the wire and coerced by normalize().",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "'' | 'True' | 'False'"
+        },
+        "index": {
+          "description": "Whether the column carries a single-column index. Partial and expression indexes are excluded from coverage heuristics.",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "boolean"
+        },
+        "unique": {
+          "description": "Whether the column carries a unique constraint of its own. Membership in a composite unique group is a different fact and is not this flag. See C06.",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "boolean"
+        },
+        "file": {
+          "description": "Evidence file for this column, when it differs from the graph source.",
+          "$ref": "#/$defs/longText"
+        },
+        "line": {
+          "description": "Line in the evidence file. A non-negative integer; a string is rejected.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "typeBasis": {
+          "description": "How the type was established, for example a catalog read or an ORM model.",
+          "$ref": "#/$defs/displayText"
+        },
+        "typeDefinition": {
+          "description": "Full type definition text, for example an enumeration body.",
+          "$ref": "#/$defs/longText"
+        },
+        "default": {
+          "description": "Default as recorded by the adapter, without a claim about where it is applied.",
+          "x-tsType": "unknown"
+        },
+        "serverDefault": {
+          "description": "Default the database applies. See C15.",
+          "x-tsType": "unknown"
+        },
+        "applicationDefault": {
+          "description": "Default the application applies. It is not a SQL default and does not constrain rows written by other clients. See C15.",
+          "x-tsType": "unknown"
+        },
+        "ondelete": {
+          "description": "Referential action recorded for this column's declared relationship.",
+          "$ref": "#/$defs/displayText"
+        },
+        "profiling": {
+          "description": "Bounded sample statistics for this column.",
+          "$ref": "#/$defs/ColumnProfiling"
+        },
+        "sampleValues": {
+          "description": "At most three distinct, non-NULL, bounded scalars, written at the column level by the profiler when the caller opted in.",
+          "type": "array",
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/scalar"},
+          "x-tsType": "unknown[]"
+        }
+      }
+    },
+    "SchemaIndex": {
+      "title": "Index or unique group",
+      "description": "An ordered column group. Column-level unique constraints appear as single-column groups; ordered composite groups stay intact.",
+      "type": "object",
+      "x-typescript": {"name": "SchemaIndex", "required": ["columns"]},
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "description": "Constraint or index name.",
+          "$ref": "#/$defs/displayText"
+        },
+        "columns": {
+          "description": "Ordered column names. Every name must exist in allColumns unless the group is an expression index.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "unique": {
+          "description": "Whether the group enforces uniqueness.",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "boolean"
+        },
+        "partial": {
+          "description": "Whether the index is partial or filtered. Partial indexes are removed from generic full-coverage heuristics.",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "boolean"
+        },
+        "expression": {
+          "description": "Whether the index is over expressions rather than plain columns. Expression indexes are removed from generic full-coverage heuristics.",
+          "$ref": "#/$defs/legacyBoolean",
+          "x-tsType": "boolean"
+        }
+      }
+    },
+    "SchemaCheck": {
+      "title": "Check constraint",
+      "description": "A named check constraint. The definition is display-only and is never executed. See C04.",
+      "type": "object",
+      "x-typescript": {"name": "SchemaCheck", "required": []},
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "description": "Constraint name.",
+          "$ref": "#/$defs/displayText"
+        },
+        "definition": {
+          "description": "Constraint body as written in the evidence source.",
+          "$ref": "#/$defs/longText"
+        }
+      }
+    },
+    "TableProfiling": {
+      "title": "Table-level profiling metadata",
+      "description": "Metadata about the profiling run for one table, including its completeness. An incomplete table keeps whatever statistics were gathered; everything else stays unknown. See C01 and C05.",
+      "type": "object",
+      "x-typescript": {"name": "TableProfiling", "required": [], "indexSignature": "unknown"},
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "description": "Whether the profiling run finished for this table. An incomplete table is labelled, never back-filled with zeros. See C01 and C05.",
+          "type": "string",
+          "enum": ["complete", "incomplete"]
+        },
+        "reason": {
+          "description": "Why the run is incomplete, in fixed wording chosen by the worker.",
+          "$ref": "#/$defs/displayText"
+        },
+        "sampleSize": {
+          "description": "Rows examined for this table.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "sampled": {
+          "description": "True when the metadata comes from a sample rather than the whole table.",
+          "type": "boolean"
+        },
+        "scope": {
+          "description": "Scope label for the metadata.",
+          "$ref": "#/$defs/displayText"
+        }
+      }
+    },
+    "SchemaTable": {
+      "title": "Table or view",
+      "description": "One entity of the graph. Additional catalog metadata is kept as data and passed through unchanged.",
+      "type": "object",
+      "x-typescript": {
+        "name": "SchemaTable",
+        "required": ["id", "className", "domain", "type", "pk", "allColumns", "indexes", "uniques"],
+        "indexSignature": "unknown"
+      },
+      "required": ["id", "allColumns"],
+      "additionalProperties": true,
+      "dependentSchemas": {
+        "rowCountLowerBound": {
+          "description": "A lower bound is meaningful only while the exact count is unknown, so rowCount must be null or absent beside it. See C01.",
+          "properties": {"rowCount": {"type": "null"}}
+        }
+      },
+      "properties": {
+        "id": {
+          "description": "Unique lookup id for the table. It may contain dots; identifiers are never split on dots for SQL generation.",
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "description": "Physical table name, supplied separately from the display id.",
+          "$ref": "#/$defs/displayText"
+        },
+        "schema": {
+          "description": "Physical schema name.",
+          "$ref": "#/$defs/displayText"
+        },
+        "className": {
+          "description": "Application or ORM class name for this entity.",
+          "$ref": "#/$defs/displayText"
+        },
+        "domain": {
+          "description": "Declared domain, or a discovered community label. A discovered community is an analytical suggestion. See C03.",
+          "$ref": "#/$defs/displayText"
+        },
+        "type": {
+          "description": "Entity category. The visual uses Core master entity, Transaction / operational, Association / detail, Configuration / reference and Audit / integration state; custom labels are allowed and Unclassified is used when evidence is insufficient.",
+          "$ref": "#/$defs/displayText"
+        },
+        "kind": {
+          "description": "Whether the entity is a base table or a view. Defaults to table. View metadata never supplies executable SQL. See C04.",
+          "type": "string",
+          "enum": ["table", "view"],
+          "default": "table"
+        },
+        "definition": {
+          "description": "View or entity definition text. Display-only and never executed. See C04.",
+          "$ref": "#/$defs/longText"
+        },
+        "file": {
+          "description": "Evidence file for this table, when it differs from the graph source.",
+          "$ref": "#/$defs/longText"
+        },
+        "line": {
+          "description": "Line in the evidence file. A non-negative integer; a string is rejected.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "pk": {
+          "description": "Primary-key column names joined for display. normalize() derives it from primaryKey or from the primary-key flags.",
+          "type": "string",
+          "x-tsType": "string"
+        },
+        "primaryKey": {
+          "description": "Ordered primary-key column names. When present it takes precedence over the per-column flags and preserves a composite key's declared order.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "allColumns": {
+          "description": "Every column of the entity, with unique non-empty names.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SchemaColumn"}
+        },
+        "indexes": {
+          "description": "Index groups.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SchemaIndex"}
+        },
+        "uniques": {
+          "description": "Unique groups, including single-column constraints. See C06.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SchemaIndex"}
+        },
+        "checks": {
+          "description": "Check constraints.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SchemaCheck"},
+          "x-tsType": "SchemaCheck[]"
+        },
+        "rowCount": {
+          "description": "Exact row count from the adapter or from an exhausted sample, or null when unknown. Zero is a measured value and is never substituted for unknown. See C01.",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "x-tsType": "number | null"
+        },
+        "rowCountLowerBound": {
+          "description": "Lower bound from a capped sample. A capped sample yields a lower bound, not a total, and it is present only while rowCount is unknown. See C01.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "rowCountExact": {
+          "description": "Whether rowCount is exact rather than a floor.",
+          "type": "boolean"
+        },
+        "sampleSize": {
+          "description": "Rows examined for this table by the last profiling run.",
+          "$ref": "#/$defs/nonNegativeInteger",
+          "x-tsType": "number"
+        },
+        "sampled": {
+          "description": "True when the last profiling run sampled this table.",
+          "type": "boolean"
+        },
+        "profiling": {
+          "description": "Table-level profiling metadata, including completeness.",
+          "$ref": "#/$defs/TableProfiling"
+        }
+      }
+    },
+    "SchemaLink": {
+      "title": "Relationship",
+      "description": "One ordered column pair. A composite foreign key is emitted as one link per pair, all sharing a non-empty constraintId, and counts once as a relationship while the association count is column pairs. See C11.",
+      "type": "object",
+      "x-typescript": {
+        "name": "SchemaLink",
+        "required": ["source", "column", "target", "targetColumn", "kind"]
+      },
+      "required": ["source", "column", "target", "targetColumn", "kind"],
+      "additionalProperties": true,
+      "properties": {
+        "source": {
+          "description": "Child table id. It must exist in tables.",
+          "$ref": "#/$defs/identifier"
+        },
+        "column": {
+          "description": "Child column name. It must exist in the source table.",
+          "$ref": "#/$defs/identifier"
+        },
+        "target": {
+          "description": "Parent table id. A declared target must resolve in the loaded scope; an inferred target may be absent and is then labelled unresolved.",
+          "$ref": "#/$defs/identifier"
+        },
+        "targetColumn": {
+          "description": "Parent column name.",
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "description": "Evidence class, exactly one of the two values. A declared relationship comes from whatever evidence source the snapshot identifies; a naming-based one is an observation about column names. The two classes stay distinguishable in data, styling and labels. See C07 and C09.",
+          "type": "string",
+          "enum": ["declared FK", "inferred by naming"]
+        },
+        "constraintId": {
+          "description": "Constraint identity, non-empty and unique within the source table. Every pair of one composite foreign key shares it. See C11.",
+          "$ref": "#/$defs/displayText"
+        },
+        "name": {
+          "description": "Display name for the relationship.",
+          "$ref": "#/$defs/displayText"
+        },
+        "ondelete": {
+          "description": "Referential action recorded for the relationship.",
+          "$ref": "#/$defs/displayText"
+        },
+        "cardinality": {
+          "description": "Cardinality when the evidence establishes it, otherwise unknown.",
+          "type": "string",
+          "enum": ["one-to-many", "one-to-one", "unknown"]
+        }
+      }
+    },
+    "SchemaGraph": {
+      "title": "SchemaGraph",
+      "description": "The exchange format adapters emit and the artifact renders. It is an exchange format, not a claim that every database uses the same type system.",
+      "type": "object",
+      "x-typescript": {
+        "name": "SchemaGraph",
+        "required": ["tables", "links"],
+        "indexSignature": "unknown"
+      },
+      "required": ["project", "tables", "links"],
+      "additionalProperties": true,
+      "properties": {
+        "contractVersion": {
+          "description": "Contract version as MAJOR.MINOR. A document without the field is treated as 1.0. A different major version is rejected; a higher minor version is accepted and its unknown fields are ignored.",
+          "type": "string",
+          "pattern": "^1\\.[0-9]+$",
+          "default": "1.0",
+          "maxLength": 32
+        },
+        "project": {
+          "description": "Project identity.",
+          "$ref": "#/$defs/SchemaProject"
+        },
+        "source": {
+          "description": "Evidence provenance.",
+          "$ref": "#/$defs/SchemaSource"
+        },
+        "tables": {
+          "description": "Every table and view in the selected scope, with unique ids.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SchemaTable"}
+        },
+        "links": {
+          "description": "Every relationship, one entry per ordered column pair.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SchemaLink"}
+        }
+      }
+    }
+  }
+}

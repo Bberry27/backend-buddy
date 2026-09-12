@@ -1,0 +1,41 @@
+{
+  "name": "backend-buddy",
+  "version": "0.1.0-alpha",
+  "private": true,
+  "type": "module",
+  "description": "Backend Buddy: schema exploration, bounded read-only profiling, and review platform",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10.5.1"
+  },
+  "scripts": {
+    "restore": "npm --prefix packages/explorer ci",
+    "build": "node scripts/project.mjs build",
+    "typecheck": "npm --prefix packages/explorer run typecheck",
+    "test": "node scripts/project.mjs test",
+    "test:python": "node scripts/project.mjs test:python",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
+    "guard": "node scripts/private_data_guard.mjs",
+    "notices": "node scripts/generate_notices.mjs",
+    "notices:check": "node scripts/generate_notices.mjs --check",
+    "fixtures": "node scripts/generate-fixtures.mjs",
+    "contract": "node scripts/gen_contract.mjs",
+    "contract:check": "node scripts/gen_contract.mjs --check",
+    "verify:host": "node scripts/verify_host.mjs",
+    "lint:colors": "node scripts/check-hardcoded-colors.mjs",
+    "hooks": "node scripts/install-hooks.mjs",
+    "up": "node scripts/deploy.mjs up",
+    "down": "node scripts/deploy.mjs down",
+    "restart": "node scripts/deploy.mjs restart",
+    "logs": "node scripts/deploy.mjs logs",
+    "status": "node scripts/deploy.mjs status",
+    "rebuild": "node scripts/deploy.mjs rebuild",
+    "open": "node scripts/deploy.mjs open",
+    "admin": "python -m tools.local_admin.server"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "playwright": "1.63.0",
+    "pngjs": "7.0.0"
+  }
+}

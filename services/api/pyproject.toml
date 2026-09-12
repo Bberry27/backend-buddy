@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=70.0.0,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bb-api"
+version = "0.1.0"
+description = "Metadata store, API, and worker for Backend Buddy"
+requires-python = ">=3.13,<4"
+dependencies = [
+  # Declarative models and the Core constructs the migration is written against.
+  "sqlalchemy>=2.0.36,<3",
+  # Migrations. Every revision ships a tested downgrade (deployment-architecture.md section 8).
+  "alembic>=1.14.0,<2",
+  # PostgreSQL 16 driver. The binary wheel keeps the image free of a libpq build step; the
+  # SQLAlchemy URL is normalised to postgresql+psycopg in app/db.py so psycopg 3 is always used.
+  "psycopg[binary]>=3.2,<4",
+  # A02, the API foundation.
+  # The application framework and its ASGI server (deployment-architecture.md section 1 runs
+  # `uvicorn app.main:app`). The plain uvicorn distribution is deliberate: the `[standard]` extra
+  # adds websockets, watchfiles and uvloop, none of which this API uses, and every added
+  # distribution is another row for pip-audit to judge.
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.32,<1",
+  # Configuration: the BB_* environment contract in deployment-architecture.md section 4.
+  "pydantic-settings>=2.6,<3",
+  # Password hashing (ADR-0005: argon2id, minimum length 12, deny list).
+  "argon2-cffi>=23.1,<26",
+  # Structured JSON logging with a request id and the redaction processor (CTQ-16).
+  "structlog>=24.4,<26",
+  # Rate limits on login and API-key creation (security-architecture.md section 3).
+  "slowapi>=0.1.9,<1",
+]
+
+# Work packages A03 and A04 add the rest of the runtime set named in
+# docs/architecture/deployment-architecture.md section 2: `cryptography` for envelope encryption
+# and `jsonschema` for snapshot validation. A02 does not declare `cryptography`: the only
+# cryptographic primitive it needs is a sha256 fingerprint of the master key, which
+# `hashlib` provides, and a dependency the package cannot reach is a pip-audit row with no
+# corresponding code path. A03, which actually encrypts, declares it.
+
+[project.optional-dependencies]
+# `httpx` backs fastapi.testclient.TestClient; `coverage` measures the CTQ-12 auth threshold.
+dev = ["ruff>=0.16,<0.17", "mypy>=1.13,<3", "httpx>=0.27,<1", "coverage>=7.6,<9"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+# The common-password deny list is data the auth package reads at first use, so it must be
+# installed beside the module rather than left behind in the source tree (A02).
+"app.auth" = ["common-passwords.txt"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.ruff.lint.flake8-annotations]
+# `**options: Any` on a thin wrapper around a library function is honest, not a missing type:
+# SQLAlchemy's create_engine and Core insert() both take genuinely dynamic keyword arguments.
+allow-star-arg-any = true
+
+[tool.ruff.lint.per-file-ignores]
+# The body of a revision is written by `alembic revision --autogenerate` and kept equal to the
+# model by test_A01_migration_matches_models. Reflowing those lines by hand would invite exactly
+# the transcription error the drift test exists to catch, so the line-length rule is waived here
+# and nowhere else.
+"alembic/versions/*.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["app", "tests", "alembic/env.py"]
+# Revision files are loaded by Alembic through the file system, and their names start with a digit,
+# so they are not importable module names. Ruff lints them; mypy cannot name them.
+exclude = "alembic/versions/"

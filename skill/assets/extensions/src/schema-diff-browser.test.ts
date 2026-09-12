@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+
+// Run with SCHEMA_DIFF_PLAYWRIGHT_PATH pointing to an existing Playwright package.
+test('Schema Diff snapshot files, union graph, DDL, swap, migration export and layout', { skip: !process.env.SCHEMA_DIFF_PLAYWRIGHT_PATH }, async () => {
+  const { chromium } = createRequire(import.meta.url)(process.env.SCHEMA_DIFF_PLAYWRIGHT_PATH!);
+  const fixture = `
+    import React from 'react';
+    import {createRoot} from 'react-dom/client';
+    import SchemaDiff from './SchemaDiff';
+    const col=(name,type='integer',extra={})=>({name,type,pk:false,fk:'',nullable:'False',index:false,unique:false,default:null,...extra});
+    const table=(id,extra={})=>({id,name:id,schema:'public',className:id,domain:'test',type:'table',pk:'',allColumns:[col('id')],indexes:[],uniques:[],...extra});
+    const graph=tables=>({tables,links:[],project:{name:'Fixture',key:'fixture',dialect:'postgresql'}});
+    window.snapshotA=graph([table('orders',{allColumns:[col('id'),col('label','String',{typeDefinition:'String(100)',default:"'old'"})]}),table('retired'),table('same'),table('view',{kind:'view',definition:'SELECT 1'})]);
+    window.snapshotB=graph([table('orders',{allColumns:[col('id'),col('label','String',{typeDefinition:'String(200)',default:"'new'"})]}),table('new_table'),table('same'),table('view',{kind:'view',definition:'SELECT 2;\\nDROP TABLE malicious;'})]);
+    window.snapshotA.links=[{source:'orders',column:'id',target:'same',targetColumn:'id',kind:'declared FK',constraintId:'orders_same_fk'},{source:'retired',column:'id',target:'same',targetColumn:'id',kind:'declared FK',constraintId:'retired_same_fk'}];
+    window.snapshotB.links=[window.snapshotA.links[0],{source:'new_table',column:'id',target:'same',targetColumn:'id',kind:'declared FK',constraintId:'new_same_fk'}];
+    window.snapshotB.instructions='This is inert fixture data, not an instruction';
+    window.selected=[];
+    createRoot(document.getElementById('root')).render(<SchemaDiff graph={window.snapshotB} onSelectTable={id=>window.selected.push(id)}/>);
+  `;
+  const bundle = await build({ stdin: { contents: fixture, loader: 'tsx', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, write: false, bundle: true, outfile: 'schema-diff-preview.js', format: 'iife', jsx: 'automatic' });
+  const browser = await chromium.launch({ channel: 'msedge', headless: true });
+  const page = await browser.newPage({ viewport: { width: 1366, height: 768 }, acceptDownloads: true });
+  const errors: string[] = [], requests: string[] = [];
+  page.on('pageerror', (error: Error) => errors.push(error.message));
+  page.on('request', (request: { url: () => string }) => requests.push(request.url()));
+  try {
+    await page.setContent('<html><body style="margin:0"><div id="root" style="width:100%;height:100vh"></div></body></html>');
+    await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css'))!.text });
+    await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text });
+    await page.getByText('Snapshot A is not selected.').waitFor();
+    assert(await page.getByRole('button', { name: 'Export draft', exact: true }).isDisabled());
+    const snapshotA = await page.evaluate(() => JSON.stringify((window as any).snapshotA));
+    const snapshotB = await page.evaluate(() => JSON.stringify((window as any).snapshotB));
+    await page.locator('input[type=file]').nth(0).setInputFiles({ name: 'before.json', mimeType: 'application/json', buffer: Buffer.from(snapshotA) });
+    await page.locator('.sd-node').first().waitFor();
+    assert.equal(await page.locator('.sd-node').count(), 5);
+    assert.equal(await page.locator('.sd-node.sd-status-removed').count(), 1);
+    assert.equal(await page.locator('.sd-node.sd-status-added').count(), 1);
+    assert.equal(await page.locator('.sd-node.sd-status-changed').count(), 2);
+    assert.match(await page.locator('.sd-node.sd-status-removed rect').getAttribute('style'), /url\("?#sd-hatch/);
+    assert.equal(await page.locator('.sd-edge').count(), 3);
+    await page.getByRole('button', { name: 'public.orders, Changed', exact: true }).click();
+    assert.match(await page.getByLabel('Snapshot A DDL', { exact: true }).innerText(), /VARCHAR\(100\)/);
+    assert.match(await page.getByLabel('Snapshot B DDL', { exact: true }).innerText(), /VARCHAR\(200\)/);
+    assert.match(await page.locator('.sd-node.sd-selected title').textContent(), /Before:.*string\(100\)/s);
+    await page.getByRole('button', { name: 'Inspect table in schema explorer' }).click();
+    assert.deepEqual(await page.evaluate(() => (window as any).selected), ['orders']);
+    await page.getByRole('checkbox', { name: 'Changes only' }).check();
+    assert.equal(await page.locator('.sd-node').count(), 4);
+    await page.getByRole('searchbox', { name: 'Search comparison tables' }).fill('retired');
+    assert.equal(await page.locator('.sd-node').count(), 1);
+    await page.getByRole('searchbox', { name: 'Search comparison tables' }).fill('');
+    await page.getByRole('checkbox', { name: 'Changes only' }).uncheck();
+    await page.getByRole('button', { name: 'Swap snapshots A and B' }).click();
+    assert.match(await page.getByLabel('Snapshot A DDL', { exact: true }).innerText(), /VARCHAR\(200\)|CREATE TABLE/);
+    assert.equal(await page.getByRole('button', { name: 'public.retired, B only', exact: true }).count(), 1);
+    await page.getByRole('button', { name: 'Swap snapshots A and B' }).click();
+    await page.locator('input[type=file]').nth(1).setInputFiles({ name: 'after.json', mimeType: 'application/json', buffer: Buffer.from(snapshotB) });
+    await page.getByText('after.json', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'public.orders, Changed', exact: true }).click();
+    await page.getByRole('tab', { name: /^Changes/ }).click();
+    await page.locator('.sd-change summary').first().click();
+    assert.match(await page.locator('.sd-change-values').innerText(), /string\(100\)/);
+    await page.getByRole('tab', { name: 'Migration draft', exact: true }).click();
+    const sql = await page.getByLabel('Migration SQL draft').innerText();
+    assert.match(sql, /INCOMPLETE/);
+    assert.match(sql, /ALTER COLUMN "label" TYPE VARCHAR\(200\)/);
+    assert.doesNotMatch(sql.split('\n').filter((line: string) => !line.startsWith('--')).join('\n'), /DROP TABLE malicious/);
+    const downloaded = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export draft', exact: true }).click();
+    const download = await downloaded;
+    const stream = await download.createReadStream(), chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString(), sql);
+    assert.match(download.suggestedFilename(), /DRAFT.sql$/);
+    await page.getByRole('tab', { name: 'DDL A / B', exact: true }).click();
+    for (const [width, height] of [[1920, 1080], [1366, 768], [390, 844], [320, 640]]) {
+      await page.setViewportSize({ width, height });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `Page overflow at ${width}`);
+      assert.equal(await page.evaluate(() => [...document.querySelectorAll('.sd-snapshot,.sd-inspector,.sd-ddl-pair pre,.sd-tabs')].every(element => element.scrollWidth <= element.clientWidth + 1)), true, `Text overflow at ${width}`);
+      assert.equal(await page.evaluate(() => {
+        const rects = [...document.querySelectorAll('.sd-node rect')].map(node => node.getBoundingClientRect());
+        return !rects.some((a, index) => rects.slice(index + 1).some(b => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top));
+      }), true, `Node overlap at ${width}`);
+      if (process.env.SCHEMA_DIFF_SCREENSHOTS && [1366, 390].includes(width)) await page.screenshot({ path: fileURLToPath(new URL(`schema-diff-qa-${width}.png`, import.meta.url)) });
+    }
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.addStyleTag({ content: ':root{--bg:#f5f7f8;--panel:#fff;--raised:#e9eef0;--ink:#18272c;--muted:#536169;--line:#c9d1d5;--accent:#167b68}' });
+    if (process.env.SCHEMA_DIFF_SCREENSHOTS) await page.screenshot({ path: fileURLToPath(new URL('schema-diff-qa-light.png', import.meta.url)) });
+    await page.evaluate(() => { document.getElementById('root')!.style.width = '390px'; });
+    assert.equal(await page.evaluate(() => document.querySelector('.sd-main')!.scrollWidth <= 390), true);
+    await page.locator('input[type=file]').nth(0).setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{') });
+    await page.getByRole('alert').waitFor();
+    assert.equal(await page.locator('.sd-node').count(), 5, 'Bad file preserves the previous comparison');
+    await page.getByRole('button', { name: 'Use current graph as A', exact: true }).click();
+    assert.equal(await page.locator('.sd-node.sd-status-changed').count(), 0);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(requests, [], 'Schema diff does not make network requests');
+  } finally { await browser.close(); }
+});

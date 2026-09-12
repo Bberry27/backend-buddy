@@ -1,0 +1,5 @@
+# Snapshots describe real database schemas, so nothing here is ever committed.
+# Drop a JSON file in this directory and restart to serve it instead of the sample.
+*
+!.gitignore
+!README.md

@@ -1,0 +1,4 @@
+# Optional runtime dependency: only needed when profiling PostgreSQL through
+# schema_profiler.py / serve_explorer.py. SQLite profiling and the whole test
+# suite (test_*.py) are standard-library only and run without anything here.
+psycopg[binary]>=3.2,<4

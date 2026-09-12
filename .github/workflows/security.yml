@@ -1,0 +1,128 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Weekly, Monday 06:17 UTC. Off the hour to avoid the top-of-hour queue.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The gitleaks GitHub Action needs a paid license key for organisation-owned
+      # repositories. The CLI is MIT-licensed, so run the pinned binary directly with
+      # default rules only. The private name denylist runs locally (see
+      # scripts/private_data_guard.mjs) and is never part of the repository or this scan.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.21.2
+        run: |
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan repository history with default rules
+        run: gitleaks detect --source . --redact --exit-code 1 --verbose
+
+  npm-audit:
+    name: npm audit (production dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Audit locked production dependencies
+        run: npm --prefix packages/explorer audit --omit=dev --audit-level=high
+
+  pip-audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+
+      # Every requirements file, not just the profiler's optional psycopg. packages/profiler pins
+      # jsonschema and tools/local_admin pins psycopg and cryptography -- the two libraries the
+      # shipped container image installs -- and all three went unaudited while this step named a
+      # single path. Keep this list in step with PYTHON_REQUIREMENTS_FILES in
+      # scripts/generate_notices.mjs; scripts/repo_consistency.test.mjs checks that.
+      - name: Audit Python requirements
+        run: |
+          set -eu
+          audited=0
+          for requirements in packages/explorer/server/requirements.txt packages/profiler/requirements.txt tools/local_admin/requirements.txt; do
+            if [ -f "$requirements" ]; then
+              echo "::group::pip-audit $requirements"
+              pip-audit -r "$requirements"
+              echo "::endgroup::"
+              audited=$((audited + 1))
+            else
+              echo "No $requirements found; skipping it."
+            fi
+          done
+          if [ "$audited" -eq 0 ]; then
+            echo "No requirements file found at all; nothing to audit."
+          fi
+
+  notices-drift:
+    name: Third-party notices drift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/explorer/package-lock.json
+
+      - name: Restore locked dependencies
+        run: npm run restore
+
+      # A dependency bump necessarily changes THIRD_PARTY_NOTICES.md, and Dependabot
+      # cannot run our generator, so gating its pull requests on drift would turn every
+      # bump red for a reason the author cannot fix. Report the drift there and enforce
+      # it everywhere else, including the push to main after the bump merges: a stale
+      # notices file then fails main loudly and `npm run notices` fixes it in one commit.
+      - name: THIRD_PARTY_NOTICES.md matches the lockfile
+        id: drift
+        continue-on-error: ${{ github.actor == 'dependabot[bot]' }}
+        run: node scripts/generate_notices.mjs --check
+
+      - name: Explain expected drift on a dependency bump
+        if: steps.drift.outcome == 'failure' && github.actor == 'dependabot[bot]'
+        run: |
+          echo "::notice title=Regenerate notices after merging::THIRD_PARTY_NOTICES.md is out of date because this pull request changes dependencies. This is expected and is not a merge blocker. After merging, run 'npm run notices' and commit the result; the push to main enforces it."
+
