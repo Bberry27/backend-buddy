@@ -4,11 +4,12 @@
 
 Report security issues privately. Do not open a public issue, discussion, or pull request that describes a vulnerability before a fix is available.
 
-- Preferred: GitHub private vulnerability reporting on this repository (Security tab, "Report a vulnerability"). It is available on private repositories and keeps the report and the fix in one place. Enable it once under Settings, Code security.
+- Preferred while this repository is private: open an issue here and put `security:` at the front of the title. A private repository's issues are visible only to people granted access, so this is a private channel among the maintainer and the contributors, and it keeps the report and the fix in one place. Use the direct route below instead if the report concerns another contributor, or if it should not be visible to all of them.
+- GitHub's own private vulnerability reporting (Security tab, "Report a vulnerability") is a **public**-repository feature and cannot be enabled here today. It becomes the preferred route if this repository is ever made public; this policy is updated in the same change.
 - Include the affected component and commit, reproduction steps or a proof of concept, your assessment of impact, and whether the issue involves customer data or credentials.
 - Expect an acknowledgement within a week and a disclosure timeline agreed with you. This is a single-maintainer project, so response times are best effort, not contractual. Reporters who wish to be credited are credited when the fix is released.
 
-If private vulnerability reporting is not yet enabled, contact the repository owner named in `.github/CODEOWNERS` directly through a private channel. There is no security mailing address for this project; it is maintained by one person.
+To reach the maintainer directly instead, contact the owner named in `.github/CODEOWNERS` through the contact details on that GitHub profile. There is no security mailing address for this project; it is maintained by one person, and response times are best effort.
 
 ## Supported versions
 
