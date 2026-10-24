@@ -1,0 +1,14 @@
+# Findings the secret scan reported that are not secrets. One fingerprint per line
+# (commit:path:rule:line), each with the reason it is here.
+#
+# Keep this file short and justify every entry. A scanner that cries wolf gets ignored, but a
+# scanner silenced without a reason is worse: anything added here has to be something a reader
+# can check. If an entry is for a value that ever was a real credential, rotating it comes
+# first and the line below is not the fix.
+#
+# A test fixture's password constant. The value existed only in this repository's own tests,
+# authenticated nothing anywhere, and read as a secret solely because it was random-looking
+# text next to the name PASSWORD. The fixture now uses word-shaped values that say what they
+# are, so no later commit repeats the finding; this entry covers the one commit that still
+# carries it, which is cheaper than rewriting a branch that is already pushed and reviewed.
+52455f374b2ff29e72d496bb8b8c4232894a84a2:tools/local_admin/test_local_admin.py:generic-api-key:643
