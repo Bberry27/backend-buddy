@@ -162,6 +162,104 @@ export function cityHeightAdvice(layout: CityLayout): string {
     + `the other ${unknown} sit at the baseline height and are marked ?.`;
 }
 
+/** One road into or out of the selected table, with what is known about its load. */
+export interface CityTrafficRoad {
+  road: CityRoad;
+  /** Which way the foreign key points, read from the selected table. */
+  direction: 'in' | 'out';
+  neighbour: CityBuilding;
+  /** Rows on the child side: the rows that actually carry the key. Null when nobody counted them. */
+  load: number | null;
+  /** Child rows per parent row for this one relationship (C02), or null when either count is unknown. */
+  ratio: number | null;
+  /** 0 to 1 against the busiest road of this selection. Null keeps an unmeasured road unmeasured. */
+  intensity: number | null;
+}
+
+/** What the roads at one building add up to. */
+export interface CityTraffic {
+  building: CityBuilding;
+  /** Heaviest first; roads with an unknown load sort last rather than as light ones. */
+  roads: CityTrafficRoad[];
+  inbound: number;
+  outbound: number;
+  unknown: number;
+  busiest: CityTrafficRoad | null;
+}
+
+/**
+ * The traffic at one building: which roads touch it, which way each runs, and how heavy it is.
+ *
+ * Heaviness is the child table's measured row count -- the rows that carry the foreign key -- and
+ * not a measurement of queries, which this product never observes. A road whose child count nobody
+ * measured keeps a null intensity and is drawn at the baseline width: an unknown load is not a
+ * light one (C01), and the ratio beside it stays unknown unless both counts are known (C02).
+ */
+export function cityTraffic(layout: CityLayout, selectedId: string | null): CityTraffic | null {
+  if (!selectedId) return null;
+  const byId = new Map(layout.buildings.map(building => [building.id, building]));
+  const building = byId.get(selectedId);
+  if (!building) return null;
+
+  const roads: CityTrafficRoad[] = [];
+  for (const road of layout.roads) {
+    const outbound = road.source === selectedId;
+    if (!outbound && road.target !== selectedId) continue;
+    const neighbour = byId.get(outbound ? road.target : road.source);
+    if (!neighbour) continue;
+    // The road runs child -> parent, so the child is always its source whichever end is selected.
+    const child = outbound ? building : neighbour;
+    roads.push({ road, direction: outbound ? 'out' : 'in', neighbour,
+      load: child.rowCount, ratio: road.ratio, intensity: null });
+  }
+  if (!roads.length) return null;
+
+  const busiest = Math.max(0, ...roads.map(entry => entry.load ?? 0));
+  const scale = Math.log1p(busiest);
+  for (const entry of roads) {
+    entry.intensity = entry.load === null ? null : scale > 0 ? Math.log1p(entry.load) / scale : 1;
+  }
+  roads.sort((a, b) => (b.load ?? -1) - (a.load ?? -1) || compare(a.neighbour.id, b.neighbour.id));
+  return {
+    building, roads,
+    inbound: roads.filter(entry => entry.direction === 'in').length,
+    outbound: roads.filter(entry => entry.direction === 'out').length,
+    unknown: roads.filter(entry => entry.load === null).length,
+    busiest: roads.find(entry => entry.load !== null) || null,
+  };
+}
+
+/** The roads of a selection, by road id, so a renderer can ask about one road in constant time. */
+export const cityTrafficById = (traffic: CityTraffic | null): Map<string, CityTrafficRoad> =>
+  new Map((traffic?.roads || []).map(entry => [entry.road.id, entry]));
+
+/**
+ * How wide a road draws while a selection is on screen. An unknown load keeps the baseline width
+ * it already had, so a road nobody measured never reads as a quiet one.
+ */
+export const cityTrafficWidth = (road: CityRoad, intensity: number | null): number =>
+  road.width * (intensity === null ? 1 : 1.7 + 2.3 * intensity);
+
+/** A fan-out ratio as a person reads it: child rows per single parent row. */
+export const cityRatioLabel = (ratio: number): string =>
+  `${ratio >= 10 ? Math.round(ratio).toLocaleString() : ratio.toFixed(ratio >= 1 ? 1 : 2)}:1`;
+
+/** One line naming what the roads at this building carry, for the panel heading and its label. */
+export function cityTrafficSummary(traffic: CityTraffic): string {
+  const name = traffic.building.table.name || traffic.building.id;
+  const parts = [`${name}: ${traffic.inbound} inbound, ${traffic.outbound} outbound`];
+  if (traffic.busiest) {
+    const busiest = traffic.busiest;
+    const ratio = busiest.ratio === null ? '' : `, ${cityRatioLabel(busiest.ratio)} per parent row`;
+    parts.push(`busiest ${busiest.neighbour.table.name || busiest.neighbour.id} at `
+      + `${busiest.load!.toLocaleString()} child rows${ratio}`);
+  }
+  if (traffic.unknown) {
+    parts.push(`${traffic.unknown} with an unknown row count, drawn at the baseline width`);
+  }
+  return `${parts.join('; ')}.`;
+}
+
 export function cityTableLabel(table: CityTable): string {
   const count = cityRowCount(table);
   return `${table.name || table.id} · ${count === null ? 'Unprofiled (row count unknown)' : `${count.toLocaleString()} rows`} · ${table.allColumns.length} columns`;

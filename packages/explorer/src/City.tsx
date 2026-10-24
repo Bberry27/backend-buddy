@@ -4,7 +4,8 @@ import { Html, OrbitControls } from '@react-three/drei';
 import { Box, ChevronDown, ChevronUp, Focus, Map as MapIcon, RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react';
 import * as THREE from 'three';
 import type { SchemaGraph, LiveConnection } from './types';
-import { CITY_HEIGHT_BASES, CITY_LABEL_DENSITIES, cityHeightAdvice, cityLabelled, cityTableLabel, layoutCity, placeCityLabels, type CityBuilding, type CityHeightBasis, type CityLabelDensity, type CityLayout, type CityLabelPlacement } from './city-layout';
+import { CITY_HEIGHT_BASES, CITY_LABEL_DENSITIES, cityHeightAdvice, cityLabelled, cityRatioLabel, cityTableLabel, cityTraffic, cityTrafficById, cityTrafficSummary, cityTrafficWidth, layoutCity, placeCityLabels, type CityBuilding, type CityHeightBasis, type CityLabelDensity, type CityLayout, type CityLabelPlacement, type CityTraffic, type CityTrafficRoad } from './city-layout';
+import { CAVEATS } from './caveat-strings';
 import { CITY_LIGHT_COLORS, ROAD_COLORS, SEMANTIC_COLORS } from './palettes';
 import { useTheme } from './theme';
 import './City.css';
@@ -226,10 +227,23 @@ function Buildings({ layout, onHover, onSelect }: {
   </instancedMesh>;
 }
 
-function Roads({ layout }: { layout: CityLayout }) {
+/**
+ * The streets, and the traffic on them while a table is selected.
+ *
+ * A selected table's roads widen by their load and the rest dim, which is what makes one table's
+ * connections readable in a city of them. Hue keeps meaning what it meant: an inferred road stays
+ * the inferred colour and is brightened rather than repainted, so traffic never dresses a guess up
+ * as a declared key (C07).
+ */
+function Roads({ layout, traffic, highlight }: {
+  layout: CityLayout; traffic: Map<string, CityTrafficRoad>; highlight: string;
+}) {
   // three.js needs a resolved colour: an instanced mesh cannot read a custom property.
   const roads = ROAD_COLORS[useTheme()];
   const mesh = useRef<THREE.InstancedMesh>(null);
+  // The canvas only draws on demand, and writing instance attributes is not a scene-graph change
+  // it notices. Without this, picking a table repaints the roads into a frame nobody renders.
+  const invalidate = useThree(state => state.invalidate);
   const segments = useMemo(() => layout.roads.flatMap(road => road.points.slice(1).map((to, i) => ({
     from: road.points[i], to, road,
   }))), [layout]);
@@ -237,25 +251,34 @@ function Roads({ layout }: { layout: CityLayout }) {
     if (!mesh.current) return;
     const transform = new THREE.Object3D();
     segments.forEach(({ from, to, road }, index) => {
-      transform.position.set((from[0] + to[0]) / 2, 0.06, (from[1] + to[1]) / 2);
-      transform.scale.set(Math.abs(to[0] - from[0]) || road.width, 0.04, Math.abs(to[1] - from[1]) || road.width);
+      const entry = traffic.get(road.id);
+      const width = entry ? cityTrafficWidth(road, entry.intensity) : road.width;
+      // Traffic rides a hair above the rest so a busy road is never hidden under a quiet one.
+      transform.position.set((from[0] + to[0]) / 2, entry ? 0.075 : 0.06, (from[1] + to[1]) / 2);
+      transform.scale.set(Math.abs(to[0] - from[0]) || width, 0.04, Math.abs(to[1] - from[1]) || width);
       transform.updateMatrix();
       mesh.current!.setMatrixAt(index, transform.matrix);
-      mesh.current!.setColorAt(index, new THREE.Color(road.crossDistrict ? roads.cross : road.inferred ? roads.inferred : roads.declared));
+      const color = new THREE.Color(entry && !road.inferred ? highlight
+        : road.crossDistrict ? roads.cross : road.inferred ? roads.inferred : roads.declared);
+      if (entry && road.inferred) color.multiplyScalar(1.4);
+      else if (!entry && traffic.size) color.multiplyScalar(0.4);
+      mesh.current!.setColorAt(index, color);
     });
     mesh.current.instanceMatrix.needsUpdate = true;
     if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
     mesh.current.computeBoundingSphere();
-  }, [segments, roads]);
+    invalidate();
+  }, [segments, roads, traffic, highlight, invalidate]);
   if (!segments.length) return null;
   return <instancedMesh ref={mesh} args={[undefined, undefined, segments.length]} raycast={() => {}}>
     <boxGeometry args={[1, 1, 1]} /><meshBasicMaterial />
   </instancedMesh>;
 }
 
-function FlatCity({ layout, onHover, onSelect, priorityId, labelled, reset, zoomRequest }: {
+function FlatCity({ layout, onHover, onSelect, priorityId, labelled, reset, zoomRequest, traffic, highlight }: {
   layout: CityLayout; onHover: (building: CityBuilding | null) => void; onSelect: (id: string) => void;
   priorityId: string | null; labelled: ReadonlySet<string>; reset: number; zoomRequest: number;
+  traffic: Map<string, CityTrafficRoad>; highlight: string;
 }) {
   const roads = ROAD_COLORS[useTheme()];
   const svg = useRef<SVGSVGElement>(null);
@@ -309,10 +332,19 @@ function FlatCity({ layout, onHover, onSelect, priorityId, labelled, reset, zoom
     {layout.districts.map(d => <g key={d.id}>
       <rect x={d.x} y={d.z} width={d.width} height={d.depth} fill={d.color} fillOpacity="0.1" stroke={d.color} strokeOpacity="0.55" strokeWidth="0.15" />
     </g>)}
-    <g fill="none" strokeLinejoin="round" aria-hidden="true">{layout.roads.map(road =>
-      <path key={road.id} d={road.points.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ')}
-        stroke={road.crossDistrict ? roads.cross : road.inferred ? roads.inferred : roads.declared}
-        strokeWidth={road.width} strokeDasharray={road.inferred ? '0.5 0.4' : undefined} />)}</g>
+    <g fill="none" strokeLinejoin="round" aria-hidden="true">{layout.roads.map(road => {
+      // A road on the selection carries moving dashes from child to parent, which is the direction
+      // the key points. An inferred road keeps its own colour there, so the movement never makes a
+      // naming guess look declared (C07).
+      const entry = traffic.get(road.id);
+      return <path key={road.id} d={road.points.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ')}
+        className={entry ? 'schema-city-road-flow' : undefined}
+        stroke={entry && !road.inferred ? highlight
+          : road.crossDistrict ? roads.cross : road.inferred ? roads.inferred : roads.declared}
+        strokeOpacity={!entry && traffic.size ? 0.3 : 1}
+        strokeWidth={entry ? cityTrafficWidth(road, entry.intensity) : road.width}
+        strokeDasharray={entry ? '0.9 0.6' : road.inferred ? '0.5 0.4' : undefined} />;
+    })}</g>
     {layout.buildings.map(building => <g key={building.id} role="button" tabIndex={0}
       className="schema-city-target" aria-label={`${cityTableLabel(building.table)} · ${building.domain}`}
       onFocus={() => {
@@ -333,6 +365,64 @@ function FlatCity({ layout, onHover, onSelect, priorityId, labelled, reset, zoom
     </g>
     <g className="schema-city-names" aria-label="Persistent table names"><LabelGroups labels={labels} onSelect={onSelect} onHover={onHover} /></g>
   </svg>;
+}
+
+// How many roads the panel writes out before it counts the rest. Six fits the smallest supported
+// width without pushing the caveat under it off the scene.
+const CITY_TRAFFIC_ROWS = 6;
+
+/**
+ * What the selected table's roads carry, as numbers rather than line widths.
+ *
+ * The map answers which roads are busy; this answers how busy and with what, because a width is a
+ * comparison and not a figure anyone can quote. Rows select their neighbour, so following a heavy
+ * road is one click, and an unmeasured load shows the city's own `?` rather than a plausible zero.
+ */
+function TrafficPanel({ traffic, onSelect, onHover }: {
+  traffic: CityTraffic; onSelect: (id: string) => void;
+  onHover: (building: CityBuilding | null) => void;
+}) {
+  const shown = traffic.roads.slice(0, CITY_TRAFFIC_ROWS);
+  const name = traffic.building.table.name || traffic.building.id;
+  return <aside className="schema-city-traffic" aria-label={cityTrafficSummary(traffic)}>
+    <p className="schema-city-traffic-head">
+      <strong>{name}</strong>
+      <span>{traffic.inbound} in · {traffic.outbound} out
+        {traffic.unknown ? ` · ${traffic.unknown} unmeasured` : ''}</span>
+    </p>
+    <ol>
+      {shown.map(entry => {
+        const neighbour = entry.neighbour.table.name || entry.neighbour.id;
+        const direction = entry.direction === 'in'
+          ? `${neighbour} references ${name}` : `${name} references ${neighbour}`;
+        return <li key={entry.road.id}>
+          <button type="button" onClick={() => onSelect(entry.neighbour.id)}
+            onPointerEnter={() => onHover(entry.neighbour)} onPointerLeave={() => onHover(null)}
+            title={`${direction}${entry.road.inferred ? ', inferred by naming' : ''}`}>
+            <span className="schema-city-traffic-arrow" aria-hidden="true">
+              {entry.direction === 'in' ? '←' : '→'}</span>
+            <span className="schema-city-traffic-name">{neighbour}</span>
+            {entry.road.inferred && <span className="schema-city-traffic-inferred">inferred</span>}
+            <span className="schema-city-traffic-bar" aria-hidden="true">
+              <i style={{ width: `${Math.round((entry.intensity ?? 0) * 100)}%` }} /></span>
+            <span className="schema-city-traffic-load"
+              title={entry.load === null ? 'Row count not measured' : 'Rows on the child side'}>
+              {entry.load === null ? '?' : entry.load.toLocaleString()}</span>
+            <span className="schema-city-traffic-ratio"
+              title={entry.ratio === null ? 'Ratio unknown: one of the two counts is not measured'
+                : 'Child rows per parent row'}>
+              {entry.ratio === null ? '?' : cityRatioLabel(entry.ratio)}</span>
+          </button>
+        </li>;
+      })}
+    </ol>
+    {traffic.roads.length > shown.length &&
+      <p className="schema-city-traffic-more">+{traffic.roads.length - shown.length} more roads</p>}
+    <p className="schema-city-traffic-note" title={CAVEATS.C02.text}>
+      Road width and bars are the child table's measured row count, not observed queries. A ratio
+      is child rows per parent row for that one relationship.
+    </p>
+  </aside>;
 }
 
 export default function City({ graph, onSelectTable }: CityProps) {
@@ -419,6 +509,10 @@ export default function City({ graph, onSelectTable }: CityProps) {
     [layout, density, keep]);
   const selectedBuilding = useMemo(() => layout.buildings.find(building => building.id === selected) || null,
     [layout, selected]);
+  // What the roads at the selected table carry. Null with nothing selected, so an unpicked city
+  // keeps the plain street map it had.
+  const traffic = useMemo(() => cityTraffic(layout, selected), [layout, selected]);
+  const trafficRoads = useMemo(() => cityTrafficById(traffic), [traffic]);
   // Said where the flatness is, because the legend key alone did not carry it.
   const advice = cityHeightAdvice(layout);
   return <section className="schema-city" aria-label="Schema City">
@@ -460,7 +554,8 @@ export default function City({ graph, onSelectTable }: CityProps) {
       onKeyDown={onCameraKey}>
       {!layout.buildings.length ? <div className="schema-city-empty">No tables in this schema.</div> : flat ?
         <FlatCity layout={layout} onHover={setHovered} onSelect={selectTable} priorityId={selected}
-          labelled={labelled} reset={reset} zoomRequest={zoomRequest} /> :
+          labelled={labelled} reset={reset} zoomRequest={zoomRequest}
+          traffic={trafficRoads} highlight={citySelection} /> :
         !webglReady ? <div className="schema-city-empty" role="status">Starting city...</div> : <CityBoundary onFailure={onFailure}>
           <Canvas frameloop="demand" dpr={[1, 1.5]} camera={{ fov: 42 }}
             gl={{ antialias: true, alpha: true, powerPreference: 'default', failIfMajorPerformanceCaveat: false }}
@@ -473,7 +568,8 @@ export default function City({ graph, onSelectTable }: CityProps) {
               <boxGeometry args={[d.width, 0.16, d.depth]} />
               <meshStandardMaterial color={d.color} transparent opacity={0.22} roughness={1} depthWrite={false} />
             </mesh>)}
-            <Roads layout={layout} /><Buildings layout={layout} onHover={setHovered} onSelect={selectTable} />
+            <Roads layout={layout} traffic={trafficRoads} highlight={citySelection} />
+            <Buildings layout={layout} onHover={setHovered} onSelect={selectTable} />
             {hovered && hovered.id !== selected &&
               <BuildingOutline building={hovered} color={citySelection} strong={false} />}
             {selectedBuilding && <BuildingOutline building={selectedBuilding} color={citySelection} strong />}
@@ -486,6 +582,7 @@ export default function City({ graph, onSelectTable }: CityProps) {
         <strong>{hovered.table.name || hovered.id}</strong><span>{hovered.domain}</span>
         <span>{hovered.rowCount === null ? 'Unprofiled · row count unknown' : `${hovered.rowCount.toLocaleString()} rows`} · {hovered.table.allColumns.length} columns</span>
       </div>}
+      {traffic && <TrafficPanel traffic={traffic} onSelect={selectTable} onHover={setHovered} />}
     </div>
     <div className="schema-city-legend" aria-label="City legend">
       {failed && <span className="schema-city-failure" role="status">WebGL unavailable · Flat map active</span>}
@@ -497,6 +594,7 @@ export default function City({ graph, onSelectTable }: CityProps) {
       {layout.districts.map(d => <span key={d.id} title={d.id}><i style={{ background: d.color }} />{d.id}</span>)}
       <span><i className="schema-city-road-key" />Cross-domain FK</span>
       <span title="Road width uses the child/parent row-count ratio when both counts are known. It is a volume proxy, not measured relationship cardinality.">Road width: row ratio</span>
+      {traffic && <span title={CAVEATS.C02.text}>Selected: roads widen by child rows, the rest dim</span>}
     </div>
   </section>;
 }
