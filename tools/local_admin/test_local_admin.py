@@ -639,8 +639,11 @@ class PageStyleTests(unittest.TestCase):
 class EditConnectionPageTests(unittest.TestCase):
     """The edit page over HTTP: what it renders, and what saving it does on disk."""
 
-    CERTIFICATE = '-----BEGIN CERTIFICATE-----\nunrepeatable-authority-5512\n'
-    PASSWORD = 'unmistakable-secret-4417'
+    # Word-shaped on purpose. A random-looking literal beside the name PASSWORD is exactly what
+    # a secret scanner is built to catch, and a fixture is not worth a red scan; these only have
+    # to be distinctive enough to find in a rendered page.
+    CERTIFICATE = '-----BEGIN CERTIFICATE-----\ncertificate-body-never-rendered\n'
+    PASSWORD = 'stored-password-never-rendered'
 
     @staticmethod
     def seeded() -> tuple[AdminServer, str]:
@@ -690,7 +693,7 @@ class EditConnectionPageTests(unittest.TestCase):
                           'value="reporting_ro"'):
                 self.assertIn(value, body, f'{value} was not prefilled')
             self.assertNotIn(self.PASSWORD, body, 'the edit page rendered the stored password')
-            self.assertNotIn('unrepeatable-authority-5512', body,
+            self.assertNotIn('certificate-body-never-rendered', body,
                              'the edit page rendered the stored certificate')
 
     def test_local_admin_a_blank_password_in_the_form_keeps_the_stored_one(self) -> None:
