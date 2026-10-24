@@ -134,16 +134,25 @@ class ConnectionStore:
     def get(self, connection_id: str) -> Connection | None:
         return self._load().get(connection_id)
 
-    def add(self, *, name: str, host: str, port: int, database: str, username: str,
-            password: str, tls_mode: str = DEFAULT_TLS, ca_cert_pem: str = '') -> Connection:
+    @staticmethod
+    def _check(*, name: str, host: str, port: int, database: str, username: str,
+               tls_mode: str) -> None:
+        """What a saved connection must satisfy, whether it is being added or edited."""
         if tls_mode not in TLS_MODES:
             raise ValueError(f'tls_mode must be one of {", ".join(TLS_MODES)}')
         for label, value in (('name', name), ('host', host), ('database', database),
-                             ('username', username), ('password', password)):
+                             ('username', username)):
             if not str(value).strip():
                 raise ValueError(f'{label} is required')
         if not 1 <= int(port) <= 65535:
             raise ValueError('port must be between 1 and 65535')
+
+    def add(self, *, name: str, host: str, port: int, database: str, username: str,
+            password: str, tls_mode: str = DEFAULT_TLS, ca_cert_pem: str = '') -> Connection:
+        self._check(name=name, host=host, port=port, database=database, username=username,
+                    tls_mode=tls_mode)
+        if not str(password).strip():
+            raise ValueError('password is required')
 
         records = self._load()
         connection_id = secrets.token_hex(8)
@@ -154,6 +163,50 @@ class ConnectionStore:
             secret=self._encrypt(connection_id, password),
         )
         records[connection_id] = entry
+        self._save(records)
+        return entry
+
+    def update(self, connection_id: str, *, name: str, host: str, port: int, database: str,
+               username: str, password: str = '', tls_mode: str = DEFAULT_TLS,
+               ca_cert_pem: str = '', drop_ca_cert: bool = False) -> Connection:
+        """Change a saved connection in place, so a typo is corrected rather than retyped.
+
+        The two write-only fields keep what is stored unless something replaces them: an
+        empty `password` keeps the encrypted one, an empty `ca_cert_pem` keeps the stored
+        authority, and `drop_ca_cert` is the explicit way to remove it. Neither is ever
+        rendered, so a blank field in the form means "unchanged", not "cleared".
+
+        What was recorded about the old settings does not survive them. The verification
+        outcome is cleared every time, because it vouched for the previous credentials,
+        and the snapshot marker is cleared when the server, port or database changed:
+        a structure populated from one database must never be presented as another's.
+        """
+        records = self._load()
+        entry = records.get(connection_id)
+        if entry is None:
+            raise KeyError(connection_id)
+        self._check(name=name, host=host, port=port, database=database, username=username,
+                    tls_mode=tls_mode)
+
+        retargeted = (entry.host, entry.port, entry.database) != (
+            host.strip(), int(port), database.strip())
+        entry.name = name.strip()
+        entry.host = host.strip()
+        entry.port = int(port)
+        entry.database = database.strip()
+        entry.username = username.strip()
+        entry.tls_mode = tls_mode
+        if drop_ca_cert:
+            entry.ca_cert_pem = ''
+        elif ca_cert_pem.strip():
+            entry.ca_cert_pem = ca_cert_pem.strip()
+        if password:
+            entry.secret = self._encrypt(connection_id, password)
+        entry.last_verified_at = ''
+        entry.last_error = ''
+        entry.server_version = ''
+        if retargeted:
+            entry.last_snapshot = ''
         self._save(records)
         return entry
 

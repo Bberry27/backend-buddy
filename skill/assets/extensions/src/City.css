@@ -83,3 +83,42 @@
   .schema-city-summary { display: grid; gap: 3px; }
   .schema-city-legend { padding: 6px 8px; max-height: 64px; }
 }
+/* Traffic on the selected table's roads: dashes that move the way the key points. The city is a
+   still image otherwise, so the movement is what reads as traffic rather than as decoration. */
+.schema-city-road-flow { animation: schema-city-flow 1.4s linear infinite; }
+@keyframes schema-city-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -3; } }
+@media (prefers-reduced-motion: reduce) { .schema-city-road-flow { animation: none; } }
+/* The numbers behind those widths. Bottom right, opposite the hover tooltip, so hovering a
+   neighbour and reading the selection's roads do not fight for the same corner. */
+.schema-city-traffic {
+  position: absolute; right: 8px; bottom: 8px; z-index: 3; width: min(330px, calc(100% - 24px));
+  max-height: calc(100% - 24px); overflow: auto; padding: 8px 10px; font-size: 11px;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; box-shadow: 0 3px 14px var(--elevation-3);
+}
+.schema-city-traffic-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
+.schema-city-traffic-head strong { font-size: 12px; overflow-wrap: anywhere; }
+.schema-city-traffic-head span { color: var(--muted); white-space: nowrap; }
+.schema-city-traffic ol { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.schema-city-traffic li button {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 4px;
+  background: none; border: 0; border-radius: 3px; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.schema-city-traffic li button:hover { background: var(--raised); }
+.schema-city-traffic li button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.schema-city-traffic-arrow { flex: 0 0 auto; color: var(--accent); }
+.schema-city-traffic-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schema-city-traffic-inferred {
+  flex: 0 0 auto; padding: 0 4px; border: 1px solid var(--road-inferred); border-radius: 8px;
+  color: var(--road-inferred); font-size: 9px; letter-spacing: .3px; text-transform: uppercase;
+}
+.schema-city-traffic-bar { flex: 0 0 44px; height: 4px; overflow: hidden; background: var(--raised); border-radius: 2px; }
+.schema-city-traffic-bar i { display: block; height: 100%; background: var(--selection); }
+.schema-city-traffic-load { flex: 0 0 auto; min-width: 54px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.schema-city-traffic-ratio { flex: 0 0 auto; min-width: 38px; color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
+.schema-city-traffic-more { margin: 4px 0 0; color: var(--muted); }
+.schema-city-traffic-note { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid var(--line); color: var(--dim); line-height: 1.4; }
+@media (max-width: 440px) {
+  .schema-city-traffic { right: 8px; left: 8px; width: auto; max-height: 46%; }
+}

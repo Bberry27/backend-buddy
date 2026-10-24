@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { SchemaGraph, SchemaTable } from './types';
-import { CITY_HEIGHT_BASES, CITY_PROMINENT_LABELS, cityHeightAdvice, cityHeightValue, cityLabelled, cityRowCount, cityTableLabel, layoutCity } from './city-layout';
+import { CITY_HEIGHT_BASES, CITY_PROMINENT_LABELS, cityHeightAdvice, cityHeightValue, cityLabelled, cityRatioLabel, cityRowCount, cityTableLabel, cityTraffic, cityTrafficById, cityTrafficSummary, cityTrafficWidth, layoutCity } from './city-layout';
 
 function table(id: string, columnCount: number, domain = 'Core', rowCount?: number): SchemaTable {
   return { id, className: id, domain, type: 'table', pk: 'id', rowCount, indexes: [], uniques: [],
@@ -174,4 +174,105 @@ test('F08 a city smaller than the label budget loses no names', () => {
   // The default must not hide anything on a schema small enough to show in full.
   assert.equal(cityLabelled(buildings, 'prominent', new Set()).size, buildings.length);
   assert.equal(cityLabelled(buildings, 'prominent', new Set(), 0).size, 0);
+});
+
+/** A small city with known counts: one parent, two children, and one child nobody counted. */
+function trafficFixture(): SchemaGraph {
+  const tables = [
+    table('customers', 4, 'Core', 500),
+    table('orders', 6, 'Core', 100),
+    table('order_items', 5, 'Core', 5000),
+    table('refunds', 3, 'Core', 20),
+    table('audit_log', 3, 'Core'),
+  ];
+  // Roads run child -> parent, which is the direction the foreign key points.
+  const link = (source: string, target: string, kind: SchemaGraph['links'][number]['kind']) =>
+    ({ source, target, column: 'parent_id', targetColumn: 'id', kind });
+  return { tables, links: [
+    link('orders', 'customers', 'declared FK'),
+    link('order_items', 'orders', 'declared FK'),
+    link('refunds', 'orders', 'declared FK'),
+    link('audit_log', 'orders', 'inferred by naming'),
+  ] };
+}
+
+test('F08 traffic names every road at the selected table and which way it runs', () => {
+  const layout = layoutCity(trafficFixture(), 'rows');
+  const traffic = cityTraffic(layout, 'orders')!;
+  assert.ok(traffic, 'orders has four roads and reported none');
+  assert.equal(traffic.inbound, 3, 'three tables reference orders');
+  assert.equal(traffic.outbound, 1, 'orders references customers');
+  const byNeighbour = new Map(traffic.roads.map(entry => [entry.neighbour.id, entry]));
+  assert.equal(byNeighbour.get('customers')!.direction, 'out');
+  assert.equal(byNeighbour.get('order_items')!.direction, 'in');
+  // The load is always the child's rows: the ones that actually carry the key.
+  assert.equal(byNeighbour.get('order_items')!.load, 5000);
+  assert.equal(byNeighbour.get('customers')!.load, 100, 'an outbound road loads from the selection');
+});
+
+test('F08 the busiest road is the one carrying the most child rows, and it draws widest', () => {
+  const layout = layoutCity(trafficFixture(), 'rows');
+  const traffic = cityTraffic(layout, 'orders')!;
+  assert.equal(traffic.busiest!.neighbour.id, 'order_items');
+  assert.equal(traffic.roads[0].neighbour.id, 'order_items', 'the heaviest road sorts first');
+  assert.equal(traffic.roads[0].intensity, 1, 'the busiest road is the full scale');
+
+  const widths = traffic.roads.map(entry => cityTrafficWidth(entry.road, entry.intensity));
+  const busiest = traffic.roads[0], quietest = traffic.roads.find(entry => entry.neighbour.id === 'refunds')!;
+  assert.ok(cityTrafficWidth(busiest.road, busiest.intensity) >
+    cityTrafficWidth(quietest.road, quietest.intensity), 'a busy road must draw wider than a quiet one');
+  assert.ok(widths.every(width => width > 0));
+  // Every selected road is wider than it was before the selection, or the highlight is invisible.
+  for (const entry of traffic.roads) {
+    if (entry.intensity === null) continue;
+    assert.ok(cityTrafficWidth(entry.road, entry.intensity) > entry.road.width);
+  }
+});
+
+test('F08 a road whose child was never counted stays unknown rather than quiet', () => {
+  const layout = layoutCity(trafficFixture(), 'rows');
+  const traffic = cityTraffic(layout, 'orders')!;
+  const unmeasured = traffic.roads.find(entry => entry.neighbour.id === 'audit_log')!;
+  assert.equal(unmeasured.load, null);
+  assert.equal(unmeasured.intensity, null, 'an unmeasured load must not become an intensity');
+  assert.equal(unmeasured.ratio, null, 'a ratio needs both counts (C02)');
+  assert.equal(cityTrafficWidth(unmeasured.road, unmeasured.intensity), unmeasured.road.width,
+    'an unmeasured road must keep the baseline width, not a light one');
+  assert.equal(traffic.unknown, 1);
+  assert.equal(traffic.roads.at(-1)!.neighbour.id, 'audit_log', 'unknown sorts last, not lightest');
+  assert.equal(traffic.busiest!.neighbour.id, 'order_items', 'busiest skips what nobody measured');
+});
+
+test('F08 ratios are local fan-out factors, and the summary says what is unmeasured', () => {
+  const layout = layoutCity(trafficFixture(), 'rows');
+  const traffic = cityTraffic(layout, 'orders')!;
+  const items = traffic.roads.find(entry => entry.neighbour.id === 'order_items')!;
+  assert.equal(items.ratio, 50, '5000 child rows over 100 parent rows');
+  assert.equal(cityRatioLabel(items.ratio!), '50:1');
+  assert.equal(cityRatioLabel(0.2), '0.20:1');
+  assert.equal(cityRatioLabel(2.5), '2.5:1');
+
+  const summary = cityTrafficSummary(traffic);
+  assert.match(summary, /3 inbound, 1 outbound/);
+  assert.match(summary, /busiest order_items/);
+  assert.match(summary, /unknown row count/, 'the summary hid an unmeasured road');
+});
+
+test('F08 no selection and no roads mean no traffic at all', () => {
+  const layout = layoutCity(trafficFixture(), 'rows');
+  assert.equal(cityTraffic(layout, null), null);
+  assert.equal(cityTraffic(layout, 'nothing_by_that_name'), null);
+  const alone = layoutCity({ tables: [table('island', 3, 'Core', 10)], links: [] }, 'rows');
+  assert.equal(cityTraffic(alone, 'island'), null, 'a table with no roads has no traffic');
+  assert.equal(cityTrafficById(null).size, 0);
+});
+
+test('F08 the traffic index answers for the roads of the selection only', () => {
+  const layout = layoutCity(trafficFixture(), 'rows');
+  const index = cityTrafficById(cityTraffic(layout, 'orders'));
+  assert.equal(index.size, 4);
+  for (const road of layout.roads) {
+    const touches = road.source === 'orders' || road.target === 'orders';
+    assert.equal(index.has(road.id), touches, `${road.id} was indexed as ${!touches}`);
+  }
 });

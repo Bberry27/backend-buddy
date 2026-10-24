@@ -6,6 +6,98 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **R00** Query time and lock holds, from the Tools menu (`tools/local_admin/activity.py`,
+  `GET`/`POST /connections/{id}/activity`). It answers what the server is doing rather than
+  what the data looks like, so it reads three server views -- `pg_stat_activity`, `pg_locks`
+  and `pg_stat_statements` -- and writes nothing: no snapshot changes, no file is created,
+  and the report lives on the page it is drawn into. Holds come first, because a session
+  waiting behind another is the thing that is wrong now: who waits, on which relation, behind
+  which process, plus the transactions sitting idle while holding locks and pinning cleanup.
+  Then what is running longest, then cumulative statement timing with calls, mean, total and
+  rows per call. **No statement text is read from a live session**: `pg_stat_activity.query`
+  carries literals, so that column is never selected, and sessions are identified by process
+  id, state, age and the relations they hold. The text that is shown comes from
+  `pg_stat_statements`, where the server has already replaced constants with placeholders,
+  and is capped at 240 characters. A missing extension is reported as the fact it is, with
+  what an operator would do about it, rather than as an empty table; so is a role that cannot
+  read the statistics. Ages the server does not report stay unknown instead of becoming zero.
+  14 tests, including one that takes a real `ACCESS EXCLUSIVE` lock on PostgreSQL 16 and
+  asserts the hold is reported with the waiting session, the relation and the blocker.
+- **F08** Selecting a table in Schema City turns its roads into traffic. Every road touching
+  the selection widens by its load and lifts clear of the rest, which dim; in the flat map
+  the selected roads carry dashes that move from child to parent, the direction the key
+  points, and stop moving under `prefers-reduced-motion`. Load is the child table's measured
+  row count -- the rows that actually carry the foreign key -- so a road nobody measured
+  keeps the baseline width and is marked `?` rather than reading as a quiet one (C01). An
+  inferred road keeps its own colour while highlighted instead of being repainted as a
+  declared one (C07). A panel beside the city writes the numbers out: inbound and outbound
+  counts, the six heaviest roads with their load and fan-out ratio, how many are unmeasured,
+  and a row per neighbour that selects it, so following a heavy road is one click. Ratios
+  are labelled as the local per-relationship factors they are (C02). `cityTraffic()`,
+  `cityTrafficWidth()` and `cityTrafficSummary()` hold the logic, with 6 tests.
+- **R00** The local admin area can edit a saved connection (`GET`/`POST
+  /connections/{id}/edit`), so a wrong database name or a rotated password is corrected in
+  place instead of deleted and retyped. The form is the one used to add a connection,
+  prefilled from the record, with the two write-only fields left blank: an empty password
+  keeps the encrypted one, an empty certificate box keeps the stored authority, and a
+  checkbox is the explicit way to remove it. Saving re-tests the connection. What the old
+  settings established does not survive them: the verification outcome is always cleared,
+  and changing the host, port or database also discards that connection's populated
+  structure and the page rendered from it, because a schema read from one database must
+  never be shown under another's name. `current.json` now records the connection id that
+  drew the page, so that check names the right one. 14 tests, in `npm test` and in CI.
+
+### Changed
+
+- **R00** The local product opens on the schema instead of on its own plumbing. `/` is now a
+  workspace: a File / Connection / Tools / Help menu bar over the rendered explorer, with the
+  connections table moved to `/connections` and reachable from two menu items. Switching
+  database is a menu toggle (`POST /connections/{id}/activate`) rather than a different tab,
+  because every connection now keeps its own rendered page under `/state/views` and is served
+  at `/view/{id}`; a page is re-rendered only when its snapshot changed or the views that drew
+  it did. The choice of connection is remembered in `/state/active.json`, so closing the
+  browser is not a decision to forget which database you were reading. Nothing on the page
+  opens a database: populate, test, measure and gather are menu items, and the two that read
+  table data still go through their own consent page. The menus are `<details>` elements, so
+  the page still ships with no script at all and its policy gains exactly one directive,
+  `frame-src 'self'`, for the frame; the explorer inside keeps its own strict policy
+  untouched. Deleting a connection now also removes the snapshot and page drawn from it,
+  which nothing could reach any more. 5 tests.
+
+### Fixed
+
+- **R00** Populate structure threw away every measured row count and column statistic.
+  Re-reading the catalog says nothing new about how many rows a table holds, but the fresh
+  snapshot replaced the old one wholesale, so Schema City dropped back to baseline
+  buildings and nothing on screen explained why -- the counts looked as though they had
+  never been measured. `carry_measurements()` now keeps them across a re-populate, matching
+  tables by schema and name and columns by name, leaving behind anything that no longer
+  exists and estimating nothing for anything new. The snapshot they came from is named in
+  `source.basis` and the populate message says how many were kept and that re-measuring
+  refreshes them. Verified end to end against PostgreSQL 16: populate, measure, populate
+  again, counts unchanged.
+- **R00** "No readable schemas found. Grant USAGE on at least one schema." blamed a
+  privilege for something privileges had no part in. The schema discovery query reads
+  `pg_class`, which PostgreSQL lets every role read, so an empty result means the database
+  holds no tables at all -- most often because the connection names the maintenance
+  database `postgres` rather than the one holding the schema. Populate structure and Test
+  now ask the catalog which of the two it is: a database with nothing in it says so and
+  lists the other databases this role can connect to, while tables that exist but cannot
+  be read still ask for USAGE and SELECT, and say how many there are. Verified against
+  PostgreSQL 16 in both states.
+- **R00** Test and Populate structure judged different schemas. Test counted anything
+  `information_schema` would show outside `pg_catalog`, which on a managed PostgreSQL
+  includes the schemas the platform installs for its own extensions (Azure's `pgaadauth`),
+  so a database holding nothing of the user's was reported as verified and then found
+  empty a click later. `not_system_schema()` is now the single definition both queries are
+  built from.
+- **R00** Buttons in the admin area took their colour from whatever wrapped them, so the
+  three actions that are links around a button (Measure row counts, Gather column
+  statistics, Edit) rendered in the browser's link and visited-link colours beside the
+  form buttons. The stylesheet names the token instead.
+
 ### Security
 
 - **R00** The private-data guard gained a `path:coverage-data` rule and now rejects
