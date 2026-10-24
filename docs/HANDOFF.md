@@ -46,7 +46,7 @@ end to end against a real PostgreSQL 16.
 
 | Area | State |
 |---|---|
-| Local admin area (`tools/local_admin`) | Working. Connections list, credential form, test, populate structure, measure row counts, gather column statistics, delete. Server-rendered, no build step. 42 tests, in `npm test` and in CI. Dependencies declared in `tools/local_admin/requirements.txt`, which the image installs from. |
+| Local admin area (`tools/local_admin`) | Working. Opens on a workspace: a File / Connection / Tools / Help menu bar over the rendered explorer, with the connections table at `/connections`. Switching connection is a menu toggle; each one keeps its own rendered page (`/state/views`, served at `/view/{id}`) and the open one is remembered in `/state/active.json`. Connections list, credential form, test, populate structure, measure row counts, gather column statistics, query time and lock holds (`activity.py`: server views only, nothing written, no live statement text), edit, delete. Editing keeps the password and certificate unless they are retyped, and discards the populated structure when the server, port or database changes. Server-rendered, no build step, no script on any page. 88 tests, in `npm test` and in CI. Dependencies declared in `tools/local_admin/requirements.txt`, which the image installs from. |
 | Catalog introspection (`scripts/introspect_pg.py`) | Working for PostgreSQL. Tables, views with definitions, columns, keys, constraints, indexes, declared foreign keys. Metadata only. |
 | Thirteen views (`packages/explorer/src` + `skill/assets/explorer.html`) | Working. Four host views, nine React views. |
 | Offline artifact (`skill/`) | Working. Single self-contained file, strict Content Security Policy, no network. |

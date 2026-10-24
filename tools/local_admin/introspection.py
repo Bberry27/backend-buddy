@@ -114,6 +114,105 @@ def _connect(dsn: str, ca_cert_pem: str):
     return connection
 
 
+def not_system_schema(column: str) -> str:
+    """The one definition of "a schema the user would call theirs", for every query that asks.
+
+    Catalog schemas, and the ones a managed PostgreSQL installs for its own extensions --
+    Azure's `pgaadauth`, for instance -- are nobody's data model. Both queries below have to
+    agree on this, or Test verifies a connection that Populate structure then finds empty.
+    """
+    return (f"{column} NOT IN ('pg_catalog','information_schema') "
+            f"AND {column} NOT LIKE 'pg_%'")
+
+
+# The relations worth reading. `pg_class` is readable by every role, so this sees what
+# exists rather than what this role was granted. That is the whole point: the gap between
+# what exists and what `information_schema` shows separates an empty database from a
+# missing GRANT.
+USER_RELATIONS = f"""
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE c.relkind IN ('r','p','v','m','f')
+               AND {not_system_schema('n.nspname')}
+"""
+# The same relations, but only the ones this role may actually read.
+GRANTED_TABLES = f"""
+            SELECT count(*) FROM information_schema.tables
+             WHERE {not_system_schema('table_schema')}
+"""
+# Enough names to recognise the right one without turning a message into a listing.
+DATABASES_SHOWN = 12
+
+
+def survey_database(connection: Any) -> tuple[str, int, list[str]]:
+    """Where things stand on this server: the current database, how many relations it
+    holds whether or not this role may read them, and the other databases it could open.
+
+    Catalog metadata only, on a connection already opened for introspection.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT current_database()')
+        database = (cursor.fetchone() or [''])[0]
+        cursor.execute(f'SELECT count(*) {USER_RELATIONS}')
+        relations = (cursor.fetchone() or [0])[0]
+        cursor.execute("""
+            SELECT datname
+              FROM pg_database
+             WHERE datallowconn
+               AND NOT datistemplate
+               AND datname <> current_database()
+               AND has_database_privilege(datname, 'CONNECT')
+             ORDER BY datname
+        """)
+        others = [row[0] for row in cursor.fetchall()]
+    return database, relations, others
+
+
+def empty_database_detail(database: str, others: list[str]) -> str:
+    """Why an empty catalog is not a missing GRANT, and what to do about it instead.
+
+    Every role may read `pg_class`, so a database holding nothing and a database whose
+    tables are not granted to this role do not look alike. Answering the first with "grant
+    USAGE" sends someone to change a privilege that was never the problem; the usual cause
+    is naming the maintenance database `postgres` instead of the one holding the schema.
+    """
+    detail = [f'The database "{database}" holds no tables or views, in any schema.',
+              'This is not a missing privilege: every role may read the PostgreSQL catalog, '
+              'so an empty result means there is nothing in this database to read.']
+    if others:
+        shown = ', '.join(others[:DATABASES_SHOWN])
+        more = (f', and {len(others) - DATABASES_SHOWN} more'
+                if len(others) > DATABASES_SHOWN else '')
+        detail.append(f'This role can also connect to: {shown}{more}. '
+                      'Choose Edit and name the database holding your schema.')
+    else:
+        detail.append('No other database on this server accepts a connection from this '
+                      'role, so the schema may not have been created yet.')
+    return ' '.join(detail)
+
+
+def unreadable_detail(database: str, relations: int) -> str:
+    """The genuine privilege case: relations are there and this role may read none."""
+    return (f'The database "{database}" holds {relations} tables and views, and this role '
+            'can read none of them. Grant USAGE on the schema and SELECT on its tables.')
+
+
+def describe_empty(dsn: str, ca_cert_pem: str) -> str:
+    """Explain a database with nothing to introspect, as precisely as the catalog allows."""
+    try:
+        connection = _connect(dsn, ca_cert_pem)
+    except (ConnectionError, ValueError) as error:
+        return str(error)
+    try:
+        database, relations, others = survey_database(connection)
+    except Exception:  # noqa: BLE001 - failing to explain must not replace what failed
+        return 'This database holds no tables or views that can be read.'
+    finally:
+        connection.close()
+    return (unreadable_detail(database, relations) if relations
+            else empty_database_detail(database, others))
+
+
 def check_connection(dsn: str, ca_cert_pem: str) -> tuple[bool, str, str]:
     """Authenticate and confirm catalog read access. Returns (ok, detail, server_version)."""
     try:
@@ -127,13 +226,16 @@ def check_connection(dsn: str, ca_cert_pem: str) -> tuple[bool, str, str]:
             cursor.execute('SELECT version()')
             version = (cursor.fetchone() or [''])[0]
             # Prove the role can actually read the catalog, which is what introspection needs.
-            cursor.execute("SELECT count(*) FROM information_schema.tables "
-                           "WHERE table_schema NOT IN ('pg_catalog','information_schema')")
+            cursor.execute(GRANTED_TABLES)
             visible = (cursor.fetchone() or [0])[0]
         short = version.split(' on ')[0] if version else 'unknown'
         if visible == 0:
-            return (True, f'Connected to {short}, but this role can see no tables. '
-                          'Grant USAGE on the schema and SELECT on its tables.', short)
+            # `information_schema` is filtered by privilege and `pg_class` is not, so ask
+            # the catalog which of the two reasons this is before naming one.
+            database, relations, others = survey_database(connection)
+            detail = (unreadable_detail(database, relations) if relations
+                      else empty_database_detail(database, others))
+            return True, f'Connected to {short}, but nothing here can be read. {detail}', short
         return True, f'Connected to {short}; {visible} tables visible.', short
     finally:
         connection.close()
@@ -144,13 +246,9 @@ def list_schemas(dsn: str, ca_cert_pem: str) -> list[str]:
     connection = _connect(dsn, ca_cert_pem)
     try:
         with connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT n.nspname
-                  FROM pg_class c
-                  JOIN pg_namespace n ON n.oid = c.relnamespace
-                 WHERE c.relkind IN ('r','p','v','m','f')
-                   AND n.nspname NOT IN ('pg_catalog','information_schema')
-                   AND n.nspname NOT LIKE 'pg_%'
+                {USER_RELATIONS}
                  GROUP BY n.nspname
                  ORDER BY n.nspname
             """)
@@ -159,12 +257,64 @@ def list_schemas(dsn: str, ca_cert_pem: str) -> list[str]:
         connection.close()
 
 
+def carry_measurements(previous: Path, tables: list[dict[str, Any]]) -> dict[str, Any]:
+    """Keep what was measured across a re-read of the structure, instead of dropping it.
+
+    Reading the catalog again says nothing new about how many rows a table holds, but a
+    populate writes a fresh snapshot over the old one -- so every measured count vanished
+    the moment anyone refreshed the structure, and the city fell back to baseline buildings
+    with nothing on screen explaining why. Tables are matched by schema and name, columns by
+    name, and the snapshot they came from is named in `source.basis` so a carried count is
+    never passed off as part of this read.
+
+    Nothing is estimated here. A table that was never counted stays unknown, and a table or
+    column that no longer exists is simply left behind.
+    """
+    empty = {'tables': 0, 'columns': 0, 'measured_at': ''}
+    try:
+        document = json.loads(previous.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return empty
+
+    measured = {}
+    for table in document.get('tables') or []:
+        key = (table.get('schema'), table.get('name'))
+        if not all(key):
+            continue
+        columns = {column.get('name'): column.get('profiling')
+                   for column in table.get('allColumns') or []
+                   if column.get('name') and column.get('profiling')}
+        if isinstance(table.get('rowCount'), int) or columns:
+            measured[key] = (table, columns)
+    if not measured:
+        return empty
+
+    carried_tables = carried_columns = 0
+    for table in tables:
+        found = measured.get((table.get('schema'), table.get('name')))
+        if not found:
+            continue
+        old, columns = found
+        for field in ('rowCount', 'rowCountExact', 'rowCountLowerBound', 'profiling'):
+            if field in old:
+                table[field] = old[field]
+        for column in table.get('allColumns') or []:
+            profiling = columns.get(column.get('name'))
+            if profiling is not None:
+                column['profiling'] = profiling
+                carried_columns += 1
+        carried_tables += 1
+
+    return {'tables': carried_tables, 'columns': carried_columns,
+            'measured_at': (document.get('source') or {}).get('generated', 'an earlier run')}
+
+
 def introspect_to_snapshot(dsn: str, ca_cert_pem: str, output: Path, *,
                            display_name: str, schemas: list[str] | None = None) -> dict[str, Any]:
     """Read the catalog and write a contract-valid snapshot. Returns a summary."""
     chosen = schemas or list_schemas(dsn, ca_cert_pem)
     if not chosen:
-        raise RuntimeError('No readable schemas found. Grant USAGE on at least one schema.')
+        raise RuntimeError(describe_empty(dsn, ca_cert_pem))
 
     connection = _connect(dsn, ca_cert_pem)
     try:
@@ -180,14 +330,24 @@ def introspect_to_snapshot(dsn: str, ca_cert_pem: str, output: Path, *,
     dropped = graph.pop('droppedLinks')
     columns = sum(len(t['allColumns']) for t in graph['tables'])
     views = sum(1 for t in graph['tables'] if t.get('kind') == 'view')
+    carried = carry_measurements(output, graph['tables'])
 
     basis = [
         'Live PostgreSQL catalog introspection: tables, views, columns, primary keys, '
         'unique and check constraints, indexes, and declared foreign keys.',
-        'No user table was queried, so no row counts or column statistics are present; '
-        'unmeasured values are absent rather than estimated.',
-        f'Schemas read: {", ".join(chosen)}.',
     ]
+    if carried['tables']:
+        basis.append(
+            'No user table was queried by this read. Row counts and column statistics from '
+            f'the previous snapshot of this connection (generated {carried["measured_at"]}) '
+            f'were carried forward for {carried["tables"]} of {len(graph["tables"])} tables '
+            f'and {carried["columns"]} columns, with nothing estimated for the rest. '
+            'Measure row counts again to refresh them.')
+    else:
+        basis.append(
+            'No user table was queried, so no row counts or column statistics are present; '
+            'unmeasured values are absent rather than estimated.')
+    basis.append(f'Schemas read: {", ".join(chosen)}.')
     if dropped:
         basis.append(f'{dropped} foreign-key column pairs referenced a table outside the '
                      'selected schemas and were omitted.')
@@ -228,6 +388,9 @@ def introspect_to_snapshot(dsn: str, ca_cert_pem: str, output: Path, *,
         'columns': columns,
         'foreignKeyColumnPairs': len(graph['links']),
         'droppedLinks': dropped,
+        'carried': carried['tables'],
+        'carriedColumns': carried['columns'],
+        'measuredAt': carried['measured_at'],
     }
 
 
