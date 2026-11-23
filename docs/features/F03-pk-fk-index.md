@@ -41,6 +41,7 @@ Verified against `skill/assets/explorer.html` and `skill/scripts/build_explorer.
 **Export**
 
 - `exportRows` (`:95`): `table column role type nullable target index_leading unique_groups source_line`.
+- F19: an in-view `Export PK / FK index as CSV` button (`explorer.html:93`, wired at `:94`) calls the shared `exportCSV` (`:182`), so the export is reachable at every width. Every host CSV now opens with `# ` provenance lines (view, project, `source.generated`, `source.basis`, source identifiers, export time, scope from the search, domain, entity-type and key-type filters), each a formula-guarded cell.
 
 **Defects and gaps (current state)**
 
@@ -50,7 +51,7 @@ Verified against `skill/assets/explorer.html` and `skill/scripts/build_explorer.
 - `nullable` is exported as the raw string (`'True' | 'False' | ''` -> `implicit`) at `:95`.
 - No `data-selected` attribute; the view has no column-level selection even though its rows are columns.
 - `Index coverage` is a leading-column test only (`:44`); it does not consider predicates or expressions beyond excluding partial and expression indexes, which is stated in C06.
-- Export button hidden at widths <= 700 px (`:14`).
+- The header export button is hidden at widths <= 700 px (`:14`); the in-view button added by F19 is not.
 
 ## 4. Intended behaviour
 
@@ -164,11 +165,12 @@ No `LiveConnection` method is used.
 | Planned view | `packages/explorer/src/KeyIndex.tsx` (W03) |
 | Planned logic | `packages/explorer/src/key-logic.ts`, `csv.ts` (W03) |
 | Renderer rules relied on | `skill/scripts/build_explorer.py:46-67` (column flags, groups), `:88` (`fk` stamping), `:94-95` (inferred dropped when declared exists) |
-| Tests | `skill/scripts/check_explorer.cjs` (today); `key-logic.test.ts`, `tests/e2e/views/keys.spec.ts` (W03/S02) |
+| Tests | `skill/scripts/check_explorer.cjs` (today); `key-logic.test.ts`, `tests/e2e/views/keys.spec.ts` (W03/S02); `packages/explorer/src/export-browser.test.mjs` (F19 download and formula guard) |
 
 ### Change log
 
 | Date | PR | WP | Change |
 |---|---|---|---|
+| 2026-11-22 | - | F19 | In-view CSV export button; provenance preamble and scope line on every host CSV export. |
 | 2026-09-07 | - | D05 | Initial document from the pre-repo code. |
 | 2026-09-07 | - | D05 | Review fixes: AC2 and AC3 tagged CTQ-10 (logic parity with the host `keyRows` and `indexed`, as AC1). |

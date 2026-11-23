@@ -5,8 +5,11 @@ import { arc, curveBundle, lineRadial } from 'd3-shape';
 import { ChevronLeft, ChevronRight, Maximize, Minus, Plus, Search } from 'lucide-react';
 import type { SchemaGraph, SchemaTable, ViewProps } from './types';
 import { computeCommunities, declaredRelations, tableLabel } from './lens-domain-logic';
-import { domainColor } from './palettes';
+import { domainColor, HOST_COLORS } from './palettes';
 import { useTheme } from './theme';
+import ExportButtons, { type ExportFormat } from './ExportButtons';
+import { caveatNote, exportFileStem, provenanceLines, provenanceOf } from './export-logic';
+import { exportColors, exportDiagram, inlineSvg } from './svg-export';
 import './Domains.css';
 
 export { computeCommunities } from './lens-domain-logic';
@@ -57,6 +60,8 @@ export default function Domains({ graph, onSelectTable }: ViewProps) {
   const [autoFit, setAutoFit] = useState(true), [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [focused, setFocused] = useState<string | null>(null), [hoverLink, setHoverLink] = useState<string | null>(null);
   const viewport = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   const groups = useMemo(() => {
     const collection = new Map<string, Community>();
     for (const table of graph.tables) {
@@ -113,14 +118,34 @@ export default function Domains({ graph, onSelectTable }: ViewProps) {
     const element = viewport.current;
     if (element) { element.scrollLeft = Math.max(0, (layout.size * zoom - element.clientWidth) / 2); element.scrollTop = Math.max(0, (layout.size * zoom - element.clientHeight) / 2); }
   }, [zoom, layout.size, visible, viewportSize]);
+  // F19: the current page of the diagram at its natural size, with the communities it shows.
+  async function exportDomains(format: ExportFormat) {
+    if (format !== 'svg' && format !== 'png') return;
+    if (!svgRef.current || !rootRef.current) throw new Error('Nothing to export: no tables match these filters.');
+    const shown = groups.filter(group => group.tables.some(table => visibleIds.has(table.id)));
+    const scope = [`page ${currentPage + 1} of ${pages}`, `${visible.length} of ${filtered.length} tables`,
+      query.trim() ? `search "${query.trim()}"` : '', community ? `community ${groupById.get(community)?.label ?? community}` : '',
+      edgeFilter === 'all' ? 'all relationships' : edgeFilter === 'cross' ? 'cross-domain relationships only' : 'within-domain relationships only'].filter(Boolean).join(' · ');
+    await exportDiagram(format, {
+      title: `${provenanceOf(graph).project}: Domains`,
+      lines: [...provenanceLines(provenanceOf(graph), 'Domains', new Date().toISOString()), `Scope: ${scope}`,
+        `${groups.length} detected communities · ${relations.length} declared FK constraints · ${crossCount} cross-domain · ${drawnLinks.length} drawn`],
+      legend: [...shown.map(group => ({ label: `${group.label} ${group.id} (${group.tables.length})`, color: group.color })),
+        { label: 'Within-domain FK (dashed)', color: HOST_COLORS[theme].muted, dashed: true }],
+      notes: [`Declared foreign keys only; a composite FK counts once. Inferred pairs excluded: ${graph.links.filter(link => link.kind === 'inferred by naming').length}.${invalidCount ? ` Unresolved FK pairs omitted: ${invalidCount}.` : ''} Relationships outside this page or filter: ${omittedCount}.`,
+        caveatNote('C03'), caveatNote('C11')],
+      colors: exportColors(rootRef.current, HOST_COLORS[theme]),
+    }, { markup: inlineSvg(svgRef.current, layout.size, layout.size), width: layout.size, height: layout.size }, exportFileStem(graph, 'domains'));
+  }
   function changeZoom(delta: number) { setManualZoom(Math.max(0.01, Math.min(2, zoom + delta))); setAutoFit(false); }
-  return <section className="dm-root" aria-label="Auto-clustered domains">
+  return <section className="dm-root" aria-label="Auto-clustered domains" ref={rootRef}>
     <div className="dm-toolbar">
       <label className="dm-search"><Search size={15}/><input aria-label="Search domain tables" placeholder="Search tables" value={query} onChange={event => setQuery(event.target.value)}/></label>
       <select aria-label="Detected community" value={community} onChange={event => setCommunity(event.target.value)}><option value="">All communities ({groups.length})</option>{groups.map(group => <option key={group.id} value={group.id}>{group.label}: {group.id} ({group.tables.length})</option>)}</select>
       <select aria-label="Domain relationship scope" value={edgeFilter} onChange={event => setEdgeFilter(event.target.value as typeof edgeFilter)}><option value="all">All relationships</option><option value="cross">Cross-domain only</option><option value="intra">Within-domain only</option></select>
       <label className="dm-bundle">Bundle<input aria-label="Edge bundling strength" type="range" min="0" max="1" step="0.05" value={beta} onChange={event => setBeta(Number(event.target.value))}/></label>
       <div className="dm-zoom"><button aria-label="Zoom out domains" title="Zoom out" disabled={zoom <= 0.01} onClick={() => changeZoom(-0.15)}><Minus size={15}/></button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in domains" title="Zoom in" disabled={zoom >= 2} onClick={() => changeZoom(0.15)}><Plus size={15}/></button><button aria-label="Fit domain diagram" title="Fit diagram" aria-pressed={autoFit} onClick={() => setAutoFit(true)}><Maximize size={15}/></button></div>
+      <ExportButtons subject="Domains" formats={['svg', 'png']} onExport={exportDomains} disabled={!visible.length} />
     </div>
     <div className="dm-summary"><span>{groups.length} detected communities</span><span>{relations.length} declared FK constraints</span><span>{crossCount} cross-domain</span><span>{graph.links.filter(link => link.kind === 'inferred by naming').length} inferred pairs excluded</span>{invalidCount > 0 && <span>{invalidCount} unresolved FK pairs omitted</span>}</div>
     <div className="dm-workspace">
@@ -132,7 +157,7 @@ export default function Domains({ graph, onSelectTable }: ViewProps) {
       </aside>
       <div className="dm-diagram-shell">
         <div className="dm-viewport" ref={viewport}>
-          {visible.length ? <div className="dm-canvas" style={{ width: layout.size * zoom, height: layout.size * zoom }}><svg className="dm-svg" width={layout.size * zoom} height={layout.size * zoom} viewBox={`${-layout.size / 2} ${-layout.size / 2} ${layout.size} ${layout.size}`} aria-label={`Hierarchical edge bundle, ${visible.length} tables, ${drawnLinks.length} visible FK constraints`}>
+          {visible.length ? <div className="dm-canvas" style={{ width: layout.size * zoom, height: layout.size * zoom }}><svg ref={svgRef} className="dm-svg" width={layout.size * zoom} height={layout.size * zoom} viewBox={`${-layout.size / 2} ${-layout.size / 2} ${layout.size} ${layout.size}`} aria-label={`Hierarchical edge bundle, ${visible.length} tables, ${drawnLinks.length} visible FK constraints`}>
             <g className="dm-bands">{layout.bands.map(band => <path key={band.id} d={band.path} fill={groupById.get(band.id)?.color}/>)}</g>
             <g className="dm-edges">{drawnLinks.map(link => {
               const highlighted = hoverLink === link.id || focused === link.source || focused === link.target;

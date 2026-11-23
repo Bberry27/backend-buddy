@@ -2,7 +2,10 @@ import React, { useDeferredValue, useEffect, useId, useMemo, useRef, useState } 
 import { ArrowUpRight, ChevronDown, ChevronRight, Download, FlaskConical, LoaderCircle, Search, X } from 'lucide-react';
 import type { LiveConnection, SchemaGraph } from './types';
 import { COLUMN_FAMILIES, columnFamily, columnProfile, formatProfileValue, knownCount, matchesColumn, nullableState, tableColumnFacts } from './column-logic';
-import type { ColumnFacts, ColumnFamily, ColumnTableColumn, ColumnTableEntity } from './column-logic';
+import type { ColumnFacts, ColumnFamily, ColumnFilters, ColumnTableColumn, ColumnTableEntity } from './column-logic';
+import ExportButtons, { type ExportFormat } from './ExportButtons';
+import { columnReportCsv, columnReportHtml, exportFileName } from './export-logic';
+import { downloadText } from './svg-export';
 import './ColumnTable.css';
 
 export interface ColumnTableProps {
@@ -160,6 +163,14 @@ export default function ColumnTable({ graph, onSelectTable, live }: ColumnTableP
     }
   }
 
+  // F19: the columns the current filters show, with every detected issue named in its row.
+  function exportReport(format: ExportFormat) {
+    const filters: ColumnFilters = { search: query, families, nullableOnly, unindexedForeignOnly, idWithoutForeignOnly };
+    const options = { filters, exportedAt: new Date().toISOString() };
+    if (format === 'csv') downloadText(columnReportCsv(currentGraph, options), exportFileName(currentGraph, 'column-table', 'csv'), 'text/csv;charset=utf-8');
+    else if (format === 'html') downloadText(columnReportHtml(currentGraph, options), exportFileName(currentGraph, 'column-table-report', 'html'), 'text/html;charset=utf-8');
+  }
+
   function exportSnapshot() {
     let url: string | undefined;
     try {
@@ -181,6 +192,7 @@ export default function ColumnTable({ graph, onSelectTable, live }: ColumnTableP
       <label className="ct-search"><Search size={17} aria-hidden="true" /><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search columns or tables" aria-label="Search columns or tables" /></label>
       <div className="ct-actions">
         <button type="button" className="ct-command" disabled={!live?.profile || busy || !currentGraph.tables.length} title={live?.profile ? 'Profile all tables, up to 10,000 rows per table' : 'Profiling requires a live connection with a profiler'} onClick={runProfile}>{busy ? <LoaderCircle size={16} className="ct-spin" aria-hidden="true" /> : <FlaskConical size={16} aria-hidden="true" />}<span>{busy ? 'Profiling...' : 'Profile'}</span></button>
+        <ExportButtons subject="Column Table" formats={['csv', 'html']} onExport={exportReport} disabled={!currentGraph.tables.length} />
         <button type="button" className="ct-icon-button" title="Export current schema snapshot (JSON)" aria-label="Export current schema snapshot (JSON)" onClick={exportSnapshot}><Download size={17} aria-hidden="true" /></button>
       </div>
     </div>

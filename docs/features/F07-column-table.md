@@ -47,6 +47,7 @@ Verified against `packages/explorer/src/ColumnTable.tsx` (215 lines) and `packag
 - Column inspector aside (`:204-212`): opens on tile click (local `selected {table, column}`, `:108`), shows nullability, index coverage, uniqueness, references, total rows or "Unknown", minimum and maximum (`:209`), the readout, and "Inspect table" calling `onSelectTable` (`:211`).
 - Live profile (`:141-161`): `live.profile({ tables: <every table id in the current graph>, maxRowsPerTable: 10000 })` (`:149`: `currentGraph.tables.map(table => table.id)`, so the view's own search and family filters are not applied, matching the button title "Profile all tables" at `:183`) guarded by a request token, an `inFlight` ref, and a graph-identity check with the comment "A host may install the returned graph before this promise resolves." (`:150-153`); the result replaces the whole graph for this view while `profiled.base === graph` (`:99-100`). Status line "Sampled profile; limit N rows per table. Sample distinct counts are not total distinct estimates." or "Profile completed." (`:198`); errors `role="alert"` (`:199`).
 - Export (`:163-177`): serialises `currentGraph` (possibly profiled) to `<project.key | 'schema'>-column-snapshot.json` (`:166`, `:170`).
+- Report export (F19, `ColumnTable.tsx:167`, `:195`): `CSV` and `Report` buttons export the columns the current filters show, from the current (possibly profiled) graph, through `export-logic.ts`. Each row names its issues (`No primary key recorded`, `Row count unknown`, `Unindexed declared FK`, `Nullable declared FK`, `Inferred relationship only`, `_id without declared FK`, `Nullability not recorded`), all derived from `tableColumnFacts` and `nullableState`; the HTML report highlights flagged rows and names each issue in text. Unknown counts read `unknown`; min/max are not exported. See `docs/features/F19-exports.md` section 3.
 
 **Known limitations**
 
@@ -214,13 +215,15 @@ Also surfaced here according to `docs/reference/caveats.md` "Where surfaced" but
 | Live route | `packages/explorer/server/serve_explorer.py:94-95` (`/api/profile`); `schema_profiler.py` (`profile`) |
 | Contract | `packages/explorer/src/types.ts` (`ColumnProfiling`, `LiveConnection.profile`) |
 | Navigation | `packages/explorer/src/navigation.ts` (P1, P3, P4, P7, P8, P9, P10) after C03 |
-| Tests | `packages/explorer/src/column-logic.test.ts`; `packages/explorer/src/column-browser.test.ts` (legacy, converted by S02); `tests/e2e/drill-through.spec.ts` (W04) |
+| Tests | `packages/explorer/src/column-logic.test.ts`; `packages/explorer/src/column-browser.test.ts` (legacy, converted by S02); `tests/e2e/drill-through.spec.ts` (W04); `export-logic.test.ts`, `export-browser.test.mjs` (F19) |
+| Report export | `packages/explorer/src/export-logic.ts` (`columnReport`, `columnReportCsv`, `columnReportHtml`), `ExportButtons.tsx` (F19) |
 | Host mount | `packages/explorer/src/index.tsx:22`; `skill/assets/explorer.html:195` |
 
 ### Change log
 
 | Date | PR | WP | Change |
 |---|---|---|---|
+| 2026-11-22 | - | F19 | CSV and HTML issue-report export of the filtered columns, issues derived from the existing column facts; the JSON snapshot export is unchanged. |
 | 2026-09-08 | - | C02 | The ten family colours moved from `ColumnTable.css:37-46` to `tokens.css` `--ct-family-*` with a value per theme, mirrored by `COLUMN_FAMILY_COLORS` in `palettes.ts`; `.ct-error` uses `--danger`; `.ct-root` sets `color-scheme: inherit` instead of `light dark`; every `var(--x, #hex)` fallback removed, so a light-mode mount no longer falls back to dark values. |
 | 2026-09-07 | - | D05 | Review fixes: `c` is one `table.id#column` and finding columns resolve from `f` (B1, B2, AC1, AC2, P4/P8 rows); `v.*` keys aligned to the `columns` allowlist (`family`, `only`, `page`); `onSelectColumn` takes a `columnId` string; `:149` profiles every table in the graph, not "visible"; CTQ-07/08 declared in the header (Q6); AC9 retagged to CTQ-07; AC10 to CTQ-02 only; stray Schema diff budget row and punctuation removed. |
 | 2026-09-07 | - | D05 | Initial document from the pre-repo baseline. |

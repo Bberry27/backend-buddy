@@ -5,8 +5,11 @@ import { Box, ChevronDown, ChevronUp, Focus, Map as MapIcon, RotateCcw, RotateCw
 import * as THREE from 'three';
 import type { SchemaGraph, LiveConnection } from './types';
 import { CITY_HEIGHT_BASES, CITY_LABEL_DENSITIES, cityHeightAdvice, cityLabelled, cityTableLabel, layoutCity, placeCityLabels, type CityBuilding, type CityHeightBasis, type CityLabelDensity, type CityLayout, type CityLabelPlacement } from './city-layout';
-import { CITY_LIGHT_COLORS, ROAD_COLORS, SEMANTIC_COLORS } from './palettes';
+import { CITY_LIGHT_COLORS, HOST_COLORS, ROAD_COLORS, SEMANTIC_COLORS } from './palettes';
 import { useTheme } from './theme';
+import ExportButtons, { type ExportFormat } from './ExportButtons';
+import { caveatNote, exportFileStem, provenanceLines, provenanceOf } from './export-logic';
+import { exportColors, exportDiagram, inlineSvg } from './svg-export';
 import './City.css';
 
 interface CityProps { graph: SchemaGraph; onSelectTable: (id: string) => void; live?: LiveConnection }
@@ -253,6 +256,19 @@ function Roads({ layout }: { layout: CityLayout }) {
   </instancedMesh>;
 }
 
+/**
+ * F19: lets the export button read the current 3D frame. The renderer does not preserve its
+ * drawing buffer, so the frame is rendered and read in the same task.
+ */
+function CaptureBridge({ capture }: { capture: React.MutableRefObject<(() => HTMLCanvasElement) | null> }) {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    capture.current = () => { gl.render(scene, camera); return gl.domElement; };
+    return () => { capture.current = null; };
+  }, [capture, gl, scene, camera]);
+  return null;
+}
+
 function FlatCity({ layout, onHover, onSelect, priorityId, labelled, reset, zoomRequest }: {
   layout: CityLayout; onHover: (building: CityBuilding | null) => void; onSelect: (id: string) => void;
   priorityId: string | null; labelled: ReadonlySet<string>; reset: number; zoomRequest: number;
@@ -355,6 +371,7 @@ export default function City({ graph, onSelectTable }: CityProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<CityBuilding | null>(null);
   const scene = useRef<HTMLDivElement>(null);
+  const capture = useRef<(() => HTMLCanvasElement) | null>(null);
   useEffect(() => {
     const element = scene.current!;
     let gesture: { x: number; y: number; moved: boolean } | null = null;
@@ -421,6 +438,42 @@ export default function City({ graph, onSelectTable }: CityProps) {
     [layout, selected]);
   // Said where the flatness is, because the legend key alone did not carry it.
   const advice = cityHeightAdvice(layout);
+  // F19: the flat map exports as SVG or PNG; the 3D scene as a PNG of the current camera.
+  const exportCity = async (format: ExportFormat) => {
+    const element = scene.current;
+    if (format !== 'svg' && format !== 'png') return;
+    if (!element || !layout.buildings.length) throw new Error('Nothing to export: no tables in this view.');
+    let body: { markup: string; width: number; height: number };
+    if (flat) {
+      const svg = element.querySelector<SVGSVGElement>('svg.schema-city-flat');
+      if (!svg) throw new Error('The flat map is not ready yet.');
+      const box = svg.getBoundingClientRect();
+      body = { markup: inlineSvg(svg, box.width, box.height), width: Math.ceil(box.width), height: Math.ceil(box.height) };
+    } else {
+      if (format !== 'png') return;
+      const canvas = capture.current?.();
+      if (!canvas) throw new Error('The 3D city is not ready yet.');
+      const width = Math.ceil(canvas.clientWidth), height = Math.ceil(canvas.clientHeight);
+      const frame = canvas.toDataURL('image/png');
+      const names = element.querySelector<SVGSVGElement>('svg.schema-city-names');
+      body = { width, height, markup: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+        + `<image x="0" y="0" width="${width}" height="${height}" href="${frame}" xlink:href="${frame}"/>${names ? inlineSvg(names, width, height) : ''}</svg>` };
+    }
+    const roadColors = ROAD_COLORS[theme];
+    await exportDiagram(format, {
+      title: `${provenanceOf(graph).project}: Schema City (${flat ? 'flat map' : '3D view'})`,
+      lines: [...provenanceLines(provenanceOf(graph), `Schema City, ${flat ? 'flat map' : '3D view'}`, new Date().toISOString()),
+        `Scope: ${layout.buildings.length} tables · ${unprofiled} unprofiled · height: ${basisInfo.label} · labels: ${densityInfo.label.toLowerCase()}`],
+      legend: [...layout.districts.map(district => ({ label: district.id, color: district.color })),
+        { label: 'Declared FK road', color: roadColors.declared }, { label: 'Inferred road', color: roadColors.inferred, dashed: true },
+        { label: 'Cross-domain road', color: roadColors.cross }],
+      notes: [basisInfo.legend,
+        ...(layout.basis === 'rows' && unprofiled ? [`${unprofiled} unprofiled ${unprofiled === 1 ? 'table is' : 'tables are'} drawn at baseline height${flat ? ' with a dashed outline' : ''}: ${unprofiled === 1 ? 'its row count is' : 'their row counts are'} unknown, not zero.`, caveatNote('C01')] : []),
+        'Road width uses the child/parent row-count ratio when both counts are known. It is a volume proxy, not measured relationship cardinality.',
+        caveatNote('C07')],
+      colors: exportColors(element, HOST_COLORS[theme]),
+    }, body, exportFileStem(graph, flat ? 'schema-city-flat' : 'schema-city-3d'));
+  };
   return <section className="schema-city" aria-label="Schema City">
     <div className="schema-city-toolbar">
       <div className="schema-city-summary"><strong>Schema City</strong><span>{layout.buildings.length} tables · {unprofiled} unprofiled</span></div>
@@ -453,6 +506,7 @@ export default function City({ graph, onSelectTable }: CityProps) {
         <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => setZoomRequest(value => value - 1)}><ZoomOut size={17} /></button>
         <button type="button" title="Fit city" aria-label="Fit city" onClick={() => { setReset(value => value + 1); setHovered(null); }}><Focus size={17} /></button>
       </div>
+      <ExportButtons subject="Schema City" formats={flat ? ['svg', 'png'] : ['png']} onExport={exportCity} disabled={!layout.buildings.length || (!flat && !webglReady)} />
     </div>
     <div ref={scene} className={`schema-city-scene${hovered ? ' schema-city-hovering' : ''}`}
       onContextMenu={event => event.preventDefault()} tabIndex={0}
@@ -467,6 +521,7 @@ export default function City({ graph, onSelectTable }: CityProps) {
             aria-label="Interactive 3D schema city">
             <ambientLight intensity={1.4} /><directionalLight position={[30, 70, 20]} intensity={2.2} />
             <hemisphereLight args={[cityLight.sky, cityLight.ground, 0.8]} />
+            <CaptureBridge capture={capture} />
             <CameraRig layout={layout} reset={reset} zoomRequest={zoomRequest} orbitRequest={orbitRequest}
               tiltRequest={tiltRequest} panRequest={panRequest} onFailure={onFailure} />
             {layout.districts.map(d => <mesh key={d.id} position={[d.x + d.width / 2, -0.08, d.z + d.depth / 2]}>
