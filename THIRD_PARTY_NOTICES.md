@@ -37,8 +37,8 @@ Scope:
 | `@dimforge/rapier3d-compat` | 0.12.0 | Apache-2.0 |
 | `@mediapipe/tasks-vision` | 0.10.17 | Apache-2.0 |
 | `@monogrid/gainmap-js` | 3.4.0 | MIT |
-| `@react-three/drei` | 10.7.8 | MIT |
-| `@react-three/fiber` | 9.7.0 | MIT |
+| `@react-three/drei` | 10.7.9 | MIT |
+| `@react-three/fiber` | 9.8.1 | MIT |
 | `@tweenjs/tween.js` | 23.1.3 | MIT |
 | `@types/d3-color` | 3.1.3 | MIT |
 | `@types/d3-drag` | 3.0.7 | MIT |
@@ -46,15 +46,15 @@ Scope:
 | `@types/d3-interpolate` | 3.0.4 | MIT |
 | `@types/d3-path` | 1.0.11 | MIT |
 | `@types/d3-scale` | 4.0.9 | MIT |
-| `@types/d3-selection` | 3.0.11 | MIT |
+| `@types/d3-selection` | 3.0.12 | MIT |
 | `@types/d3-shape` | 3.2.0 | MIT |
 | `@types/d3-time` | 3.0.4 | MIT |
 | `@types/d3-transition` | 3.0.9 | MIT |
 | `@types/d3-zoom` | 3.0.8 | MIT |
 | `@types/draco3d` | 1.4.10 | MIT |
 | `@types/offscreencanvas` | 2019.7.3 | MIT |
-| `@types/react` | 19.2.18 | MIT |
-| `@types/react-dom` | 19.2.7 | MIT |
+| `@types/react` | 19.3.0 | MIT |
+| `@types/react-dom` | 19.3.0 | MIT |
 | `@types/react-reconciler` | 0.28.9 | MIT |
 | `@types/stats.js` | 0.17.4 | MIT |
 | `@types/three` | 0.183.1 | MIT |
@@ -62,8 +62,8 @@ Scope:
 | `@use-gesture/core` | 10.3.1 | MIT |
 | `@use-gesture/react` | 10.3.1 | MIT |
 | `@webgpu/types` | 0.1.72 | BSD-3-Clause |
-| `@xyflow/react` | 12.11.6 | MIT |
-| `@xyflow/system` | 0.0.82 | MIT |
+| `@xyflow/react` | 12.12.0 | MIT |
+| `@xyflow/system` | 0.0.83 | MIT |
 | `base64-js` | 1.5.1 | MIT |
 | `bidi-js` | 1.1.0 | MIT |
 | `buffer` | 6.0.3 | MIT |
@@ -107,7 +107,7 @@ Scope:
 | `internmap` | 1.0.1 | ISC |
 | `is-promise` | 2.2.2 | MIT |
 | `isexe` | 2.0.0 | ISC |
-| `its-fine` | 2.0.0 | MIT |
+| `its-fine` | 2.1.1 | MIT |
 | `lie` | 3.3.0 | MIT |
 | `lucide-react` | 0.577.0 | ISC |
 | `maath` | 0.10.8 | MIT |
@@ -116,11 +116,11 @@ Scope:
 | `path-key` | 3.1.1 | MIT |
 | `potpack` | 1.0.2 | ISC |
 | `promise-worker-transferable` | 1.0.4 | Apache-2.0 |
-| `react` | 19.2.8 | MIT |
-| `react-dom` | 19.2.8 | MIT |
+| `react` | 19.3.0 | MIT |
+| `react-dom` | 19.3.0 | MIT |
 | `react-use-measure` | 2.1.7 | MIT |
 | `require-from-string` | 2.0.2 | MIT |
-| `scheduler` | 0.27.0 | MIT |
+| `scheduler` | 0.28.0 | MIT |
 | `shebang-command` | 2.0.0 | MIT |
 | `shebang-regex` | 3.0.0 | MIT |
 | `stats-gl` | 2.4.2 | MIT |
@@ -429,7 +429,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @react-three/drei 10.7.8
+### @react-three/drei 10.7.9
 
 - License: MIT
 - Repository: https://github.com/pmndrs/drei
@@ -460,7 +460,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @react-three/fiber 9.7.0
+### @react-three/fiber 9.8.1
 
 - License: MIT
 - Repository: https://github.com/pmndrs/react-three-fiber
@@ -694,7 +694,7 @@ THE SOFTWARE.
     SOFTWARE
 ```
 
-### @types/d3-selection 3.0.11
+### @types/d3-selection 3.0.12
 
 - License: MIT
 - Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
@@ -918,7 +918,7 @@ THE SOFTWARE.
     SOFTWARE
 ```
 
-### @types/react 19.2.18
+### @types/react 19.3.0
 
 - License: MIT
 - Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
@@ -950,7 +950,7 @@ THE SOFTWARE.
     SOFTWARE
 ```
 
-### @types/react-dom 19.2.7
+### @types/react-dom 19.3.0
 
 - License: MIT
 - Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
@@ -1206,7 +1206,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### @xyflow/react 12.11.6
+### @xyflow/react 12.12.0
 
 - License: MIT
 - Repository: https://github.com/xyflow/xyflow
@@ -1238,7 +1238,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @xyflow/system 0.0.82
+### @xyflow/system 0.0.83
 
 - License: MIT
 - Repository: https://github.com/xyflow/xyflow
@@ -2458,7 +2458,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### its-fine 2.0.0
+### its-fine 2.1.1
 
 - License: MIT
 - Repository: https://github.com/pmndrs/its-fine
@@ -2882,7 +2882,7 @@ THIS SOFTWARE.
   limitations under the License.
 ```
 
-### react 19.2.8
+### react 19.3.0
 
 - License: MIT
 - Repository: https://github.com/react/react
@@ -2914,7 +2914,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### react-dom 19.2.8
+### react-dom 19.3.0
 
 - License: MIT
 - Repository: https://github.com/react/react
@@ -3008,10 +3008,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### scheduler 0.27.0
+### scheduler 0.28.0
 
 - License: MIT
-- Repository: https://github.com/facebook/react
+- Repository: https://github.com/react/react
 - Homepage: https://react.dev/
 - Installed at: `node_modules/scheduler`
 - License file: `LICENSE`
