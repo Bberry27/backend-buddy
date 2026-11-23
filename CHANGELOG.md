@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   of the tables ungrouped. Open groups draw a labelled outline, and opening the inspector or
   zooming across a tier no longer throws the view back to the whole diagram.
 
+### Fixed
+
+- **A03** Populate structure no longer fails with "Duplicate relationship pair" when a
+  PostgreSQL column pair is declared by two foreign keys, typically a single-column key
+  beside a composite key that starts with the same column. Each pair is kept once, under
+  the widest constraint, and `source.basis` records how many pairs were collapsed.
+
 ### Security
 
 - **R00** The private-data guard gained a `path:coverage-data` rule and now rejects
