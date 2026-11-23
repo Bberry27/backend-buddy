@@ -976,3 +976,87 @@ class BuildIdTests(unittest.TestCase):
         # as "re-render", which is the safe direction.
         self.assertEqual(16, len(build_id(root)))
 
+
+
+class RedundantForeignKeyTests(unittest.TestCase):
+    """A column pair declared by two constraints collapses to one link instead of failing.
+
+    PostgreSQL accepts a single-column foreign key beside a composite one that starts with the
+    same column. Both are real declarations, but the contract keeps one link per column pair, so
+    the reader used to emit the pair twice and normalize() refused the whole catalog with
+    "Duplicate relationship pair". The catalog rows here are synthetic and need no database.
+    """
+
+    TABLES = [
+        ('public', 'parent', 'r', None, None),
+        ('public', 'child', 'r', None, None),
+    ]
+    COLUMNS = [
+        ('public', 'parent', 'id', 1, 'uuid', False, None, False),
+        ('public', 'parent', 'scope_id', 2, 'uuid', False, None, False),
+        ('public', 'child', 'id', 1, 'uuid', False, None, False),
+        ('public', 'child', 'parent_id', 2, 'uuid', False, None, False),
+        ('public', 'child', 'scope_id', 3, 'uuid', False, None, False),
+    ]
+    CONSTRAINTS = [
+        ('public', 'parent', 'parent_pkey', 'p', 'PRIMARY KEY (id)', [1], None, None, None, None),
+        ('public', 'parent', 'parent_id_scope_key', 'u', 'UNIQUE (id, scope_id)', [1, 2],
+         None, None, None, None),
+        ('public', 'child', 'child_pkey', 'p', 'PRIMARY KEY (id)', [1], None, None, None, None),
+        # Sorted by name, the narrow key comes first, which is the order that used to fail.
+        ('public', 'child', 'child_parent_id_fkey', 'f', 'FOREIGN KEY (parent_id)', [2],
+         'public', 'parent', [1], 'c'),
+        ('public', 'child', 'child_parent_id_scope_id_fkey', 'f', 'FOREIGN KEY (parent_id, scope_id)',
+         [2, 3], 'public', 'parent', [1, 2], 'a'),
+    ]
+
+    class Cursor:
+        def __init__(self, rows: dict[str, list[tuple]]) -> None:
+            self.rows, self.last = rows, ''
+
+        def __enter__(self) -> 'RedundantForeignKeyTests.Cursor':
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def execute(self, sql: str, _params: object = None) -> None:
+            self.last = sql
+
+        def fetchall(self) -> list[tuple]:
+            return self.rows[self.last]
+
+    def graph(self) -> dict[str, object]:
+        import introspect_pg
+        rows = {
+            introspect_pg.TABLES_SQL: self.TABLES,
+            introspect_pg.COLUMNS_SQL: self.COLUMNS,
+            introspect_pg.CONSTRAINTS_SQL: self.CONSTRAINTS,
+            introspect_pg.INDEXES_SQL: [],
+        }
+        connection = type('Connection', (), {'cursor': lambda _self: self.Cursor(rows)})()
+        return introspect_pg.introspect(connection, ['public'])
+
+    def test_A03_a_pair_declared_twice_is_one_link_under_the_widest_constraint(self) -> None:
+        import tools.local_admin.introspection  # noqa: F401 - puts scripts/ on sys.path
+        graph = self.graph()
+        pairs = [(l['source'], l['column'], l['target'], l['targetColumn']) for l in graph['links']]
+        self.assertEqual(len(pairs), len(set(pairs)), 'a column pair was emitted twice')
+        self.assertEqual(1, graph['redundantLinks'])
+        composite = [l for l in graph['links'] if l['constraintId'] == 'child_parent_id_scope_id_fkey']
+        self.assertEqual(['parent_id', 'scope_id'], [l['column'] for l in composite],
+                         'the composite key lost a pair to the narrower declaration')
+        self.assertTrue(all(l['kind'] == 'declared FK' for l in graph['links']))
+
+    def test_A03_a_catalog_with_a_redundant_key_satisfies_the_contract(self) -> None:
+        import tools.local_admin.introspection  # noqa: F401 - puts skill/scripts on sys.path
+        from build_explorer import normalize
+        graph = self.graph()
+        graph.pop('droppedLinks')
+        graph.pop('redundantLinks')
+        normalize({
+            'contractVersion': '1.0',
+            'project': {'name': 'Synthetic', 'key': 'synthetic', 'dialect': 'postgresql'},
+            'tables': graph['tables'],
+            'links': graph['links'],
+        })

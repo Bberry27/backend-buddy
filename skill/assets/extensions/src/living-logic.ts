@@ -1,6 +1,7 @@
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type SimulationNodeDatum } from 'd3-force';
 import type { SchemaGraph, SchemaLink, SchemaTable } from './types';
 import { graphFingerprint, projectScope } from './view-state';
+import { computeCommunities, declaredRelations } from './lens-domain-logic';
 
 export interface SavedPosition { x: number; y: number; pinned: boolean }
 export type Positions = Record<string, SavedPosition>;
@@ -58,7 +59,18 @@ export function visibleGraph(graph: SchemaGraph, showJunctions: boolean, reveal?
 export function snapshotKey(graph: SchemaGraph): string {
   return `backend-buddy-erd:v1:${projectScope(graph)}:${graphFingerprint(graph)}`;
 }
-export function serializePositions(positions: Positions): string { return JSON.stringify({ version: 1, positions }); }
+export function serializePositions(positions: Positions, groupBy?: GroupMode): string {
+  // The grouping rides along in the same version-1 payload: positions only make sense for the grouping
+  // they were laid out under, and older readers ignore the extra field.
+  return JSON.stringify(groupBy ? { version: 1, positions, groupBy } : { version: 1, positions });
+}
+export function parseGroupMode(raw: string | null): GroupMode | undefined {
+  try { const value = JSON.parse(raw || 'null'); return value?.version === 1 && (value.groupBy === 'prefix' || value.groupBy === 'relationships') ? value.groupBy : undefined; }
+  catch { return undefined; }
+}
+export function readGroupMode(graph: SchemaGraph): GroupMode | undefined {
+  try { return parseGroupMode(localStorage.getItem(snapshotKey(graph))); } catch { return undefined; }
+}
 export function parsePositions(raw: string | null, ids: Iterable<string>): Positions {
   const result: Positions = Object.create(null);
   try {
@@ -74,102 +86,240 @@ export function parsePositions(raw: string | null, ids: Iterable<string>): Posit
 export function readPositions(graph: SchemaGraph): Positions {
   try { return parsePositions(localStorage.getItem(snapshotKey(graph)), graph.tables.map(t => t.id)); } catch { return Object.create(null); }
 }
-export function savePositions(key: string, positions: Positions): boolean {
-  try { localStorage.setItem(key, serializePositions(positions)); return true; } catch { return false; }
+export function savePositions(key: string, positions: Positions, groupBy?: GroupMode): boolean {
+  try { localStorage.setItem(key, serializePositions(positions, groupBy)); return true; } catch { return false; }
 }
-export interface DomainCell { id: string; x: number; y: number; width: number; height: number }
+// --- Grouping and hubs (F05) -------------------------------------------------------------------
+// On a real schema the name-prefix domains put close to half the tables in 'Other', and a handful
+// of tables (the users, workspaces and accounts everything belongs to) were the target of most
+// relationships, so their lines crossed the whole canvas and buried the structure in between.
+
+/** How tables are grouped into the bubbles and regions of the diagram. */
+export type GroupMode = 'prefix' | 'relationships';
+/** The group every hub table is gathered into, whichever grouping is chosen. */
+export const HUB_GROUP = 'Shared hubs';
+/** Tables with no declared relationship left once hubs are set aside. */
+export const UNCONNECTED_GROUP = 'Unconnected';
+/** The group for tables whose only declared keys point at one hub table. */
+export const attachedGroup = (hub: string) => `Attached to ${hub}`;
+/** Below this many tables every line is readable, so nothing is treated as a hub. */
+export const HUB_MIN_TABLES = 25;
+
+const byText = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 
 /**
- * A rectangle per domain, sized to the area that domain's own tables need and packed into rows.
- * The layout used one fixed 1100x1000 anchor per domain regardless of how many tables it held, and
- * anchored so weakly that tables drifted out of their own region. Two things went wrong: a large
- * domain sprawled across its neighbours, and a small one left a hole. Sizing each cell to its
- * contents and anchoring firmly inside it keeps a domain together, which is what lets the bubbles
- * at the clustered tiers enclose a domain without overlapping the next one.
+ * Tables referenced by so many others that one line per reference would bury the diagram: at least
+ * a tenth of all tables (and never fewer than six) refer to it. Counted in distinct referring
+ * tables, so a table with several keys into the same hub counts once. Self-references and collapsed
+ * junction edges do not count. Both evidence kinds count, because both are drawn as lines.
  */
-export function domainCells(domains: { id: string; area: number }[], gap = 260): DomainCell[] {
-  // The force layout does not respect a cell edge exactly: link and collision forces push the
-  // outermost tables of a domain roughly a tenth of the cell past it. Packing a padded rectangle
-  // and reporting the smaller cell inside it turns that into proportional clearance, so a large
-  // domain's overspill cannot reach into a small neighbour. A fixed gap could not: the spill grows
-  // with the domain while the gap did not.
-  const SPREAD = 1.34;
-  // A square that holds the members' combined area with room for the aisles the collision force
-  // opens up, and never smaller than a single comfortable card.
-  const sized = domains.map(domain => {
-    const side = Math.max(620, Math.sqrt(Math.max(1, domain.area) * 2.8));
-    return { id: domain.id, width: side, height: side };
-  });
-  // Wrap into rows at roughly the square root of the total padded area, so the whole diagram stays
-  // close to square instead of becoming one very long strip.
-  const rowLimit = Math.sqrt(sized.reduce((sum, cell) => sum + cell.width * cell.height, 0)) * 1.3 * SPREAD;
-  const placed: DomainCell[] = [];
-  let x = 0, y = 0, rowHeight = 0;
-  for (const cell of sized) {
-    const outerWidth = cell.width * SPREAD, outerHeight = cell.height * SPREAD;
-    if (x > 0 && x + outerWidth > rowLimit) { x = 0; y += rowHeight + gap; rowHeight = 0; }
-    placed.push({ id: cell.id, width: cell.width, height: cell.height,
-      x: x + (outerWidth - cell.width) / 2, y: y + (outerHeight - cell.height) / 2 });
-    x += outerWidth + gap;
-    rowHeight = Math.max(rowHeight, outerHeight);
+export function hubTables(tables: SchemaTable[], rels: Relation[]): Set<string> {
+  if (tables.length < HUB_MIN_TABLES) return new Set();
+  const referrers = new Map<string, Set<string>>();
+  for (const relation of rels) {
+    if (relation.source === relation.target || relation.junction) continue;
+    if (!referrers.has(relation.target)) referrers.set(relation.target, new Set());
+    referrers.get(relation.target)!.add(relation.source);
   }
-  return placed;
+  const threshold = Math.max(6, Math.ceil(tables.length * 0.1));
+  return new Set([...referrers].filter(([, from]) => from.size >= threshold).map(([id]) => id).sort(byText));
 }
 
-interface Particle extends SimulationNodeDatum { id: string; width: number; height: number; anchorX: number; anchorY: number }
-export function layoutTables(graph: SchemaGraph, saved: Positions = {}, retainUnpinned = true): Positions {
-  const domains = [...new Set(graph.tables.map(t => t.domain || 'Other'))].sort();
-  const area = new Map<string, number>();
-  const members = new Map<string, string[]>();
-  for (const table of graph.tables) {
-    const domain = table.domain || 'Other', size = nodeSize(table);
-    area.set(domain, (area.get(domain) || 0) + size.width * size.height);
-    members.set(domain, [...(members.get(domain) || []), table.id]);
+/**
+ * The grouping a snapshot opens with. Name prefixes are kept when they actually group the schema;
+ * when a quarter or more of the tables have no domain or fall into 'Other', the prefixes say little
+ * and the declared relationships are the better guide.
+ */
+export function defaultGroupMode(tables: SchemaTable[]): GroupMode {
+  if (!tables.length) return 'prefix';
+  const ungrouped = tables.filter(table => !table.domain || table.domain === 'Other').length;
+  return ungrouped / tables.length >= 0.25 ? 'relationships' : 'prefix';
+}
+
+/**
+ * The group each table is drawn in. Hubs always go to `HUB_GROUP`. With 'prefix' every other table
+ * keeps its snapshot domain. With 'relationships' the declared-FK communities are computed with the
+ * hubs removed -- with them in, everything is one hop from a hub and collapses into one community --
+ * and each community is named after its most connected member. A table left with no relationship
+ * but its keys into hubs joins `attachedGroup(hub)` for the hub it refers to most; one with none at
+ * all is `UNCONNECTED_GROUP`. Inferred links never shape a group.
+ */
+export function tableGroups(graph: SchemaGraph, mode: GroupMode, hubs: ReadonlySet<string>): Map<string, string> {
+  const groups = new Map<string, string>();
+  if (mode === 'prefix') {
+    for (const table of graph.tables) groups.set(table.id, hubs.has(table.id) ? HUB_GROUP : (table.domain || 'Other'));
+    return groups;
   }
-  const cells = new Map(domainCells(domains.map(id => ({ id, area: area.get(id) || 0 }))).map(cell => [cell.id, cell]));
-  const particles: Particle[] = graph.tables.map(table => {
-    const domain = table.domain || 'Other';
-    const cell = cells.get(domain)!;
-    const anchorX = cell.x + cell.width / 2, anchorY = cell.y + cell.height / 2;
-    const size = nodeSize(table), old = saved[table.id];
-    // Seed on a sunflower spiral inside the domain's own cell, so the simulation starts from an
-    // arrangement that is already grouped rather than having to pull one together from scratch.
-    const group = members.get(domain)!;
-    const rank = group.indexOf(table.id);
-    const radius = Math.min(cell.width, cell.height) * 0.42 * Math.sqrt((rank + 0.5) / group.length);
-    const x = old ? old.x + size.width / 2 : anchorX + Math.cos(rank * 2.39996) * radius;
-    const y = old ? old.y + size.height / 2 : anchorY + Math.sin(rank * 2.39996) * radius;
-    return { id: table.id, ...size, anchorX, anchorY, x, y, ...(old && (old.pinned || retainUnpinned) ? { fx: x, fy: y } : {}) };
+  const rest: SchemaGraph = { ...graph, tables: graph.tables.filter(table => !hubs.has(table.id)),
+    links: graph.links.filter(link => !hubs.has(link.source) && !hubs.has(link.target)) };
+  const community = computeCommunities(rest);
+  const degree = new Map<string, number>();
+  for (const relation of declaredRelations(rest)) {
+    if (relation.source === relation.target || community.get(relation.source) !== community.get(relation.target)) continue;
+    for (const id of [relation.source, relation.target]) degree.set(id, (degree.get(id) || 0) + 1);
+  }
+  // A table whose only declared keys point at hubs belongs with the hub it hangs off most, so the
+  // tables owned by a workspace sit together instead of in one undifferentiated leftover pile.
+  const hubKeys = new Map<string, Map<string, number>>();
+  for (const relation of declaredRelations(graph)) {
+    if (!hubs.has(relation.target) || hubs.has(relation.source) || relation.source === relation.target) continue;
+    const counts = hubKeys.get(relation.source) || new Map<string, number>();
+    counts.set(relation.target, (counts.get(relation.target) || 0) + 1);
+    hubKeys.set(relation.source, counts);
+  }
+  const attached = (id: string) => {
+    const counts = hubKeys.get(id);
+    if (!counts) return UNCONNECTED_GROUP;
+    return attachedGroup([...counts].sort((a, b) => (b[1] - a[1]) || byText(a[0], b[0]))[0][0]);
+  };
+  const members = new Map<string, string[]>();
+  for (const [id, label] of community) members.set(label, [...(members.get(label) || []), id]);
+  const reserved = new Set([HUB_GROUP, UNCONNECTED_GROUP]);
+  for (const ids of members.values()) {
+    const connected = ids.filter(id => degree.get(id));
+    if (!connected.length) { for (const id of ids) groups.set(id, attached(id)); continue; }
+    const centre = [...connected].sort((a, b) => (degree.get(b)! - degree.get(a)!) || byText(a, b))[0];
+    const name = reserved.has(centre) ? `${centre} (group)` : centre;
+    for (const id of ids) groups.set(id, name);
+  }
+  for (const id of hubs) groups.set(id, HUB_GROUP);
+  return groups;
+}
+
+/** The grouping that applies when none is supplied: the snapshot's own domain. */
+export const domainGroup = (table: SchemaTable) => table.domain || 'Other';
+
+export interface GroupBox { id: string; x: number; y: number; width: number; height: number }
+
+/**
+ * Place each group's finished rectangle on the canvas, row by row, `gap` apart. Rectangles are
+ * placed whole, so two groups cannot overlap however their tables were arranged inside them. The
+ * order puts `first` (the hubs) at the start, then grows from the largest group by repeatedly taking
+ * the group most connected to those already placed, so related groups end up near each other.
+ */
+export function packGroups(sizes: { id: string; width: number; height: number }[],
+  weight: (a: string, b: string) => number = () => 0, first?: string, gap = 240): GroupBox[] {
+  const pending = [...sizes].sort((a, b) => (b.width * b.height - a.width * a.height) || byText(a.id, b.id));
+  const ordered: typeof pending = [];
+  const take = (index: number) => { ordered.push(pending[index]); pending.splice(index, 1); };
+  const lead = pending.findIndex(size => size.id === first);
+  if (lead >= 0) take(lead);
+  while (pending.length) {
+    let best = 0, bestWeight = -1;
+    pending.forEach((candidate, index) => {
+      const total = ordered.reduce((sum, placed) => sum + weight(placed.id, candidate.id), 0);
+      if (total > bestWeight) { best = index; bestWeight = total; }
+    });
+    take(best);
+  }
+  // A row limit near the square root of the total area keeps the diagram close to the shape of a
+  // wide screen instead of one long strip; a group wider than the limit gets a row to itself.
+  const area = ordered.reduce((sum, size) => sum + (size.width + gap) * (size.height + gap), 0);
+  const rowLimit = Math.max(Math.sqrt(area) * 1.45, ...ordered.map(size => size.width));
+  const boxes: GroupBox[] = [];
+  let x = 0, y = 0, rowHeight = 0;
+  for (const size of ordered) {
+    if (x > 0 && x + size.width > rowLimit) { x = 0; y += rowHeight + gap; rowHeight = 0; }
+    boxes.push({ id: size.id, x, y, width: size.width, height: size.height });
+    x += size.width + gap;
+    rowHeight = Math.max(rowHeight, size.height);
+  }
+  return boxes;
+}
+
+interface Particle extends SimulationNodeDatum { id: string; width: number; height: number }
+
+/** Lay out one group's tables around the origin and return their top-left corners. */
+function layoutGroup(tables: SchemaTable[], rels: Relation[]): Map<string, { x: number; y: number }> {
+  const ids = new Set(tables.map(table => table.id));
+  const particles: Particle[] = tables.map((table, rank) => {
+    // Seed on a sunflower spiral, so the simulation starts from a compact arrangement.
+    const radius = 160 * Math.sqrt(rank + 0.5);
+    return { id: table.id, ...nodeSize(table), x: Math.cos(rank * 2.39996) * radius, y: Math.sin(rank * 2.39996) * radius };
   });
+  const links = rels.filter(r => r.source !== r.target && ids.has(r.source) && ids.has(r.target))
+    .map(r => ({ source: r.source, target: r.target }));
   const simulation = forceSimulation(particles).stop()
-    .force('link', forceLink<Particle, {source: string; target: string}>(relations(graph).filter(r => r.source !== r.target).map(r => ({ source: r.source, target: r.target }))).id(n => n.id).distance(410).strength(0.035))
-    // Bounded repulsion: without a range limit every table pushes every other one, which is what
-    // tore the domains apart and left the acres of empty canvas between the cards.
-    .force('charge', forceManyBody<Particle>().strength(-230).distanceMax(1000))
+    .force('link', forceLink<Particle, { source: string; target: string }>(links).id(n => n.id).distance(380).strength(0.08))
+    .force('charge', forceManyBody<Particle>().strength(-260).distanceMax(1200))
     .force('collision', forceCollide<Particle>().radius(n => Math.hypot(n.width, n.height) / 2 + 25).iterations(3))
-    .force('x', forceX<Particle>(n => n.anchorX).strength(0.09))
-    .force('y', forceY<Particle>(n => n.anchorY).strength(0.09));
+    .force('x', forceX<Particle>(0).strength(0.06))
+    .force('y', forceY<Particle>(0).strength(0.06));
   simulation.tick(220); simulation.stop();
-  const positions: Positions = Object.create(null);
   const placed: { x: number; y: number; width: number; height: number }[] = [];
-  // Resolve any remaining rectangular overlap; saved user placements remain authoritative.
-  for (const n of [...particles].sort((a,b) => Number(b.fx != null) - Number(a.fx != null))) {
+  const corners = new Map<string, { x: number; y: number }>();
+  // Resolve any remaining rectangular overlap by searching outward from where the simulation left
+  // each table. This happens inside the group, before the group is placed, so it cannot push a
+  // table into another group.
+  for (const n of particles) {
     const baseX = (n.x || 0) - n.width / 2, baseY = (n.y || 0) - n.height / 2;
     let x = baseX, y = baseY;
-    if (n.fx == null) {
-      // Search outward from where the simulation left the table, rather than pushing it straight
-      // down. A downward push walked tables out of their own domain and into the one below, which
-      // is what made the domain bubbles at the clustered tiers overlap.
-      for (let attempt = 0; attempt <= particles.length * 4; attempt++) {
-        const conflict = placed.find(p => x < p.x+p.width+24 && x+n.width+24 > p.x && y < p.y+p.height+24 && y+n.height+24 > p.y);
-        if (!conflict) break;
-        const angle = attempt * 2.39996, radius = 48 + attempt * 22;
-        x = baseX + Math.cos(angle) * radius;
-        y = baseY + Math.sin(angle) * radius;
-      }
+    for (let attempt = 0; attempt <= particles.length * 4; attempt++) {
+      if (!placed.some(p => x < p.x + p.width + 24 && x + n.width + 24 > p.x && y < p.y + p.height + 24 && y + n.height + 24 > p.y)) break;
+      const angle = attempt * 2.39996, radius = 48 + attempt * 22;
+      x = baseX + Math.cos(angle) * radius; y = baseY + Math.sin(angle) * radius;
     }
-    positions[n.id] = { x, y, pinned: saved[n.id]?.pinned || false };
-    placed.push({x,y,width:n.width,height:n.height});
+    corners.set(n.id, { x, y });
+    placed.push({ x, y, width: n.width, height: n.height });
+  }
+  return corners;
+}
+
+const pairKey = (a: string, b: string) => JSON.stringify(a < b ? [a, b] : [b, a]);
+
+/**
+ * Positions for every table. Each group is laid out on its own and its bounding rectangle is then
+ * packed beside the others, so the bubbles drawn around groups cannot overlap; the earlier single
+ * simulation over the whole schema let heavily referenced tables drag their referrers across
+ * every region. Saved placements stay authoritative: pinned ones always, unpinned ones while
+ * `retainUnpinned` holds. Only tables without a kept placement are laid out, packed below the kept
+ * ones so a new group never lands on a table the user placed.
+ */
+export function layoutTables(graph: SchemaGraph, saved: Positions = {}, retainUnpinned = true,
+  groupOf: (table: SchemaTable) => string = domainGroup, first?: string): Positions {
+  const positions: Positions = Object.create(null);
+  const free: SchemaTable[] = [];
+  let floor = 0;
+  for (const table of graph.tables) {
+    const old = saved[table.id];
+    if (old && (old.pinned || retainUnpinned)) {
+      positions[table.id] = { x: old.x, y: old.y, pinned: old.pinned };
+      floor = Math.max(floor, old.y + nodeSize(table).height + 240);
+    } else free.push(table);
+  }
+  if (!free.length) return positions;
+  const rels = relations(graph);
+  const members = new Map<string, SchemaTable[]>();
+  for (const table of [...free].sort((a, b) => byText(a.id, b.id))) {
+    const group = groupOf(table);
+    members.set(group, [...(members.get(group) || []), table]);
+  }
+  const local = new Map<string, Map<string, { x: number; y: number }>>();
+  const origin = new Map<string, { x: number; y: number }>();
+  const sizes: { id: string; width: number; height: number }[] = [];
+  for (const [group, tables] of members) {
+    const corners = layoutGroup(tables, rels);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const table of tables) {
+      const at = corners.get(table.id)!, size = nodeSize(table);
+      minX = Math.min(minX, at.x); minY = Math.min(minY, at.y);
+      maxX = Math.max(maxX, at.x + size.width); maxY = Math.max(maxY, at.y + size.height);
+    }
+    local.set(group, corners);
+    origin.set(group, { x: minX, y: minY });
+    sizes.push({ id: group, width: maxX - minX, height: maxY - minY });
+  }
+  const groupOfId = new Map(graph.tables.map(table => [table.id, groupOf(table)]));
+  const crossing = new Map<string, number>();
+  for (const relation of rels) {
+    const a = groupOfId.get(relation.source)!, b = groupOfId.get(relation.target)!;
+    if (a !== b) crossing.set(pairKey(a, b), (crossing.get(pairKey(a, b)) || 0) + 1);
+  }
+  for (const box of packGroups(sizes, (a, b) => crossing.get(pairKey(a, b)) || 0, first)) {
+    const shift = origin.get(box.id)!;
+    for (const [id, at] of local.get(box.id)!) {
+      positions[id] = { x: box.x + at.x - shift.x, y: floor + box.y + at.y - shift.y, pinned: false };
+    }
   }
   return positions;
 }
@@ -210,12 +360,12 @@ export interface DomainRibbon {
  * shape of the schema is visible before any table is: a bubble with no ribbon really is an
  * unconnected domain, which is worth seeing.
  */
-export function domainAggregates(tables: SchemaTable[], relations: Relation[]):
-  { domains: DomainAggregate[]; ribbons: DomainRibbon[] } {
+export function domainAggregates(tables: SchemaTable[], relations: Relation[],
+  groupOf: (table: SchemaTable) => string = domainGroup): { domains: DomainAggregate[]; ribbons: DomainRibbon[] } {
   const byDomain = new Map<string, SchemaTable[]>();
   const domainOf = new Map<string, string>();
   for (const table of tables) {
-    const domain = table.domain || 'Other';
+    const domain = groupOf(table);
     domainOf.set(table.id, domain);
     byDomain.set(domain, [...(byDomain.get(domain) || []), table]);
   }

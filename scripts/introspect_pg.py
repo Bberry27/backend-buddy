@@ -112,6 +112,10 @@ SELECT n.nspname AS schema_name,
 
 ON_DELETE = {'a': 'NO ACTION', 'r': 'RESTRICT', 'c': 'CASCADE', 'n': 'SET NULL', 'd': 'SET DEFAULT'}
 
+# Shared with tools/local_admin so both entry points describe the collapse the same way.
+REDUNDANT_BASIS = ('{count} foreign-key column pairs were declared by more than one constraint; '
+                   'each pair is shown once, under the widest constraint that declares it.')
+
 # Districts in Schema City, colours on the relational map, and the Domains view all group
 # by `table.domain`. A single-schema database would put every table in one district,
 # which removes the point of those views. Group by the table name's leading token instead,
@@ -326,6 +330,7 @@ def introspect(connection, schemas: list[str]) -> dict[str, Any]:
         tables[identifier]['allColumns'].append(entry)
 
     links: list[dict[str, Any]] = []
+    foreign_keys: list[tuple[str, str, str, list[tuple[str, str]], str]] = []
     for row in raw_constraints:
         (schema, name, constraint, ctype, definition, local_attnums,
          foreign_schema, foreign_table, foreign_attnums, on_delete) = row
@@ -347,19 +352,34 @@ def introspect(connection, schemas: list[str]) -> dict[str, Any]:
             target_names = attnames.get(target, {})
             remote = [target_names[n] for n in (foreign_attnums or []) if n in target_names]
             action = ON_DELETE.get(on_delete or 'a', 'NO ACTION')
-            # One link per ordered column pair, all sharing the constraint id, so a
-            # composite foreign key keeps its pair-level evidence and counts once.
-            for local_column, remote_column in zip(local, remote):
-                links.append({
-                    'source': identifier,
-                    'column': local_column,
-                    'target': target,
-                    'targetColumn': remote_column,
-                    'kind': 'declared FK',
-                    'constraintId': constraint,
-                    'name': constraint,
-                    'ondelete': action,
-                })
+            foreign_keys.append((identifier, constraint, target, list(zip(local, remote)), action))
+
+    # One link per ordered column pair, all sharing the constraint id, so a composite
+    # foreign key keeps its pair-level evidence and counts once. PostgreSQL allows two
+    # constraints to declare the same pair, typically a single-column key beside a
+    # composite one that starts with the same column; the contract keeps one link per
+    # pair. Widest constraints go first, so a composite group stays whole and only the
+    # narrower, redundant declaration of the pair is collapsed and counted.
+    emitted: set[tuple[str, str, str, str]] = set()
+    redundant = 0
+    for identifier, constraint, target, pairs, action in sorted(
+            foreign_keys, key=lambda fk: (fk[0], -len(fk[3]), fk[1])):
+        for local_column, remote_column in pairs:
+            pair = (identifier, local_column, target, remote_column)
+            if pair in emitted:
+                redundant += 1
+                continue
+            emitted.add(pair)
+            links.append({
+                'source': identifier,
+                'column': local_column,
+                'target': target,
+                'targetColumn': remote_column,
+                'kind': 'declared FK',
+                'constraintId': constraint,
+                'name': constraint,
+                'ondelete': action,
+            })
 
     for schema, name, index_name, is_unique, is_partial, has_expression, key_attnums in raw_indexes:
         identifier = table_id(schema, name)
@@ -393,7 +413,8 @@ def introspect(connection, schemas: list[str]) -> dict[str, Any]:
         for column in table['allColumns']:
             column['pk'] = column['name'] in primary
 
-    return {'tables': list(tables.values()), 'links': resolvable, 'droppedLinks': dropped}
+    return {'tables': list(tables.values()), 'links': resolvable, 'droppedLinks': dropped,
+            'redundantLinks': redundant}
 
 
 def main() -> None:
@@ -422,6 +443,7 @@ def main() -> None:
         connection.close()
 
     dropped = graph.pop('droppedLinks')
+    redundant = graph.pop('redundantLinks')
     columns = sum(len(t['allColumns']) for t in graph['tables'])
     views = sum(1 for t in graph['tables'] if t.get('kind') == 'view')
     basis = [
@@ -436,6 +458,8 @@ def main() -> None:
     if dropped:
         basis.append(f'{dropped} foreign-key column pairs referenced a table outside the '
                      'selected schemas and were omitted; widen --schemas to include them.')
+    if redundant:
+        basis.append(REDUNDANT_BASIS.format(count=redundant))
 
     snapshot = {
         'contractVersion': '1.0',
@@ -479,6 +503,7 @@ def main() -> None:
         'columns': columns,
         'foreignKeyColumnPairs': len(graph['links']),
         'droppedLinks': dropped,
+        'redundantLinks': redundant,
     }, indent=1))
     print(f'\nRender it:  npm run up -- --schema {args.output}', file=sys.stderr)
 

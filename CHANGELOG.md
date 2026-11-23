@@ -17,6 +17,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   formula guard. Host CSV exports gained the same provenance preamble. Downloads are
   Blobs created in the page on a click; the artifact policy is unchanged.
 
+### Changed
+
+- **F05** Living ERD stays readable on large catalogs. Groups are laid out separately and
+  packed whole, so group outlines no longer overlap. The few tables most others refer to
+  become a `Shared hubs` group, and their lines are replaced by tags on the referring cards
+  unless hovered, searched, or turned on with "Show hub lines". A "Group by" control adds
+  grouping by declared relationships, chosen by default when name prefixes leave a quarter
+  of the tables ungrouped. Open groups draw a labelled outline, and opening the inspector or
+  zooming across a tier no longer throws the view back to the whole diagram.
+
+### Fixed
+
+- **A03** Populate structure no longer fails with "Duplicate relationship pair" when a
+  PostgreSQL column pair is declared by two foreign keys, typically a single-column key
+  beside a composite key that starts with the same column. Each pair is kept once, under
+  the widest constraint, and `source.basis` records how many pairs were collapsed.
+
 ### Security
 
 - **R00** The private-data guard gained a `path:coverage-data` rule and now rejects
