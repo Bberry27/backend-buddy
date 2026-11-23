@@ -3,16 +3,21 @@ import { Background, BaseEdge, EdgeLabelRenderer, Handle, MiniMap, Position, Rea
 import { Download, Expand, Image, LocateFixed, Maximize2, Minimize2, Pin, PinOff, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { toPng, toSvg } from 'html-to-image';
 import type { SchemaTable, ViewProps } from './types';
-import { ERD_TIER_EDGES, ERD_TIER_HYSTERESIS, domainAggregates, domainBounds, erdTier, layoutTables, neighborhood, nodeSize, planErdEdges, readPositions, rowLabel, savePositions, snapshotKey, visibleGraph, type DomainRibbon, type ErdTier, type Positions, type Relation } from './living-logic';
+import { ERD_TIER_EDGES, ERD_TIER_HYSTERESIS, HUB_GROUP, defaultGroupMode, domainAggregates, domainBounds, erdTier, hubTables, layoutTables, neighborhood, nodeSize, planErdEdges, readGroupMode, readPositions, relations, rowLabel, savePositions, snapshotKey, tableGroups, visibleGraph, type DomainRibbon, type ErdTier, type GroupMode, type Positions, type Relation } from './living-logic';
 import { useTheme } from './theme';
 import '@xyflow/react/dist/style.css';
 import './LivingERD.css';
 
-type TableData = { table: SchemaTable; detailed: boolean; pinned: boolean; dimmed: boolean; togglePin: (id: string) => void; foreign: Set<string> };
+type HubRef = { id: string; inferred: boolean };
+type TableData = { table: SchemaTable; detailed: boolean; pinned: boolean; dimmed: boolean; togglePin: (id: string) => void; foreign: Set<string>;
+  /** Hubs this table refers to, drawn as tags while hub lines are hidden. */ hubRefs: HubRef[];
+  /** Set on a hub: how many distinct tables refer to it. */ referrers?: number; openHub: (id: string) => void };
 type TableNode = Node<TableData, 'table'>;
 type DomainData = { name: string; count: number; zoom: number; expanded: boolean; preview: string[]; box: { width: number; height: number }; toggle: () => void };
 type DomainNode = Node<DomainData, 'domain'>;
-type DiagramNode = TableNode | DomainNode;
+type FrameData = { name: string; count: number; zoom: number };
+type FrameNode = Node<FrameData, 'frame'>;
+type DiagramNode = TableNode | DomainNode | FrameNode;
 type RelationshipEdgeData = { relation: Relation; markerPrefix: string; dimmed: boolean };
 type RelationshipEdgeT = Edge<RelationshipEdgeData, 'relationship'>;
 type RibbonEdgeT = Edge<{ ribbon: DomainRibbon; zoom: number }, 'ribbon'>;
@@ -20,6 +25,11 @@ type DiagramEdge = RelationshipEdgeT | RibbonEdgeT;
 
 // What each tier is called in the toolbar, so the current level of detail is stated rather than
 // inferred from how big the boxes happen to look.
+/** Hub tags shown on one card before the rest collapse into a count. */
+const HUB_TAGS = 4;
+/** Height of the hub-tag row, added to a card that carries one. */
+const HUB_ROW = 26;
+const GROUP_LABELS: Record<GroupMode, string> = { prefix: 'Name prefix', relationships: 'Relationships' };
 const TIER_LABELS: Record<ErdTier, string> = {
   overview: 'Domains', domains: 'Domains + names', tables: 'Tables', detail: 'Columns',
 };
@@ -27,13 +37,20 @@ function sampleText(value: unknown): string {
   try { const text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value); return text.length > 65 ? text.slice(0, 62) + '...' : text; } catch { return '[value]'; }
 }
 function TableCard({ data }: NodeProps<TableNode>) {
-  const { table, detailed, pinned, togglePin, dimmed, foreign } = data;
-  return <div className={`lerd-table${dimmed ? ' lerd-dimmed' : ''}${pinned ? ' lerd-pinned' : ''}`}>
+  const { table, detailed, pinned, togglePin, dimmed, foreign, hubRefs, referrers, openHub } = data;
+  const hubNote = referrers ? `Hub: ${referrers} ${referrers === 1 ? 'table refers' : 'tables refer'} here` : '';
+  return <div className={`lerd-table${dimmed ? ' lerd-dimmed' : ''}${pinned ? ' lerd-pinned' : ''}${referrers ? ' lerd-hub' : ''}`}>
     <Handle type="target" position={Position.Left} />
     <header className="lerd-table-heading">
-      <div className="lerd-table-title"><strong title={table.id}>{table.name || table.id}</strong><span>{rowLabel(table)}</span></div>
+      <div className="lerd-table-title"><strong title={table.id}>{table.name || table.id}</strong><span title={hubNote || undefined}>{rowLabel(table)}{hubNote ? ` · ${hubNote}` : ''}</span></div>
       <button className="lerd-icon nodrag" title={`${pinned ? 'Unpin' : 'Pin'} ${table.id}`} aria-label={`${pinned ? 'Unpin' : 'Pin'} ${table.id}`} aria-pressed={pinned} onClick={e => { e.stopPropagation(); togglePin(table.id); }}>{pinned ? <Pin size={15} /> : <PinOff size={15} />}</button>
     </header>
+    {hubRefs.length > 0 && <div className="lerd-hub-refs nodrag" aria-label={`Refers to hub tables: ${hubRefs.map(ref => ref.id).join(', ')}`}>
+      {hubRefs.slice(0, HUB_TAGS).map(ref => <button key={ref.id} type="button" className={`lerd-hub-ref${ref.inferred ? ' lerd-hub-ref-inferred' : ''}`}
+        title={`${ref.inferred ? 'Inferred by naming' : 'Declared FK'} to the hub table ${ref.id}. Its line is hidden while hub lines are off; hover this table or turn on Show hub lines to draw it. Select to go to ${ref.id}.`}
+        onClick={e => { e.stopPropagation(); openHub(ref.id); }}>→ {ref.id}{ref.inferred ? ' ?' : ''}</button>)}
+      {hubRefs.length > HUB_TAGS && <span className="lerd-hub-more" title={hubRefs.slice(HUB_TAGS).map(ref => ref.id).join(', ')}>+{hubRefs.length - HUB_TAGS}</span>}
+    </div>}
     {detailed && <div className="lerd-columns nodrag nowheel">
       {table.allColumns.length === 0 && <div className="lerd-no-columns">No column metadata</div>}
       {table.allColumns.map(column => {
@@ -71,6 +88,17 @@ function DomainCard({ data }: NodeProps<DomainNode>) {
       {data.count > data.preview.length &&
         <li className="lerd-domain-more">+{data.count - data.preview.length} more</li>}
     </ul>}
+  </div>;
+}
+
+/**
+ * The outline of an open group, drawn behind its tables. Without it the grouping vanished as soon as
+ * a group was opened or the zoom passed the clustered tiers, which is exactly when the tables it
+ * explains are on screen. It takes no pointer input, so panning and clicking act on the canvas.
+ */
+function GroupFrame({ data }: NodeProps<FrameNode>) {
+  return <div className="lerd-frame" aria-hidden="true">
+    <span style={{ fontSize: Math.min(13 / data.zoom, 44) }}>{data.name} · {data.count} {data.count === 1 ? 'table' : 'tables'}</span>
   </div>;
 }
 
@@ -112,7 +140,7 @@ function RelationshipEdge(props: EdgeProps<RelationshipEdgeT>) {
 // One id per domain, shared by the bubble node and by the edge planner that routes a relationship
 // to whatever is standing in for a collapsed table.
 const bubbleId = (domain: string) => `__lerd_domain_${domain}`;
-const nodeTypes = { table: TableCard, domain: DomainCard };
+const nodeTypes = { table: TableCard, domain: DomainCard, frame: GroupFrame };
 const edgeTypes = { relationship: RelationshipEdge, ribbon: RibbonEdge };
 
 function Diagram({ graph, onSelectTable }: ViewProps) {
@@ -120,7 +148,18 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
   // its two built-in themes to use, and LivingERD.css maps its variables onto the tokens.
   const colorMode = useTheme();
   const rf = useReactFlow<DiagramNode, DiagramEdge>();
-  const [positions, setPositions] = useState<Positions>(() => layoutTables(graph, readPositions(graph)));
+  const allRelations = useMemo(() => relations(graph), [graph]);
+  // Hubs are found on the whole graph, not on what the current toggles show, so the set does not
+  // change while the user works.
+  const hubs = useMemo(() => hubTables(graph.tables, allRelations), [graph, allRelations]);
+  const [groupBy, setGroupBy] = useState<GroupMode>(() => readGroupMode(graph) ?? defaultGroupMode(graph.tables));
+  const groups = useMemo(() => tableGroups(graph, groupBy, hubs), [graph, groupBy, hubs]);
+  const groupOf = useCallback((table: SchemaTable) => groups.get(table.id) || 'Other', [groups]);
+  const [showHubEdges, setShowHubEdges] = useState(false);
+  // A layout saved before groups were recorded with it was made by the old whole-schema simulation;
+  // its pins are kept, the rest is laid out again so the groups cannot overlap.
+  const [positions, setPositions] = useState<Positions>(() =>
+    layoutTables(graph, readPositions(graph), readGroupMode(graph) !== undefined, groupOf, HUB_GROUP));
   const positionsRef = useRef(positions);
   const domainOfRef = useRef<Map<string, string>>(new Map());
   const [zoom, setZoom] = useState(1);
@@ -137,7 +176,13 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
   const [exporting, setExporting] = useState(false);
   const canvas = useRef<HTMLDivElement>(null);
   const markerPrefix = `lerd-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  // What the viewport last showed on purpose: the whole diagram ('all'), a set of tables it was asked
+  // to frame, or wherever the user zoomed or panned to ('moved'). A canvas resize keeps that. Two
+  // resizes used to refit the whole diagram and throw the user's place away: the host's inspector
+  // opening on a selection, and the toolbar re-wrapping when the tier label changed length mid-zoom.
+  const framed = useRef<'all' | 'moved' | string[]>('all');
   const fitDiagram = useCallback((duration = 0) => {
+    framed.current = 'all';
     // Fitting must not change what the diagram is showing, so the ceiling stays inside the band the
     // current tier already occupies.
     const clustered = rf.getViewport().zoom < ERD_TIER_EDGES[1];
@@ -147,6 +192,7 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
   /** Frame a specific set of tables, so arriving somewhere shows its surroundings too. */
   const fitIds = useCallback((ids: string[], duration = 400) => {
     if (!ids.length) return;
+    framed.current = ids;
     void rf.fitView({ nodes: ids.map(id => ({ id })), padding: 0.28, maxZoom: 1.2, minZoom: 0.001, duration });
   }, [rf]);
   // Fitting has to wait for the render that makes the nodes visible: React Flow measures only what
@@ -175,21 +221,54 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
     const observer = new ResizeObserver(([entry]) => {
       const {width, height} = entry.contentRect;
       if (previous && width > 0 && height > 0 && (Math.abs(width - previous.width) > 1 || Math.abs(height - previous.height) > 1)) {
+        const before = previous;
         cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => fitDiagram());
+        frame = requestAnimationFrame(() => {
+          const target = framed.current;
+          // A canvas that was too small to have shown anything (a hidden tab) has no place to keep.
+          if (target === 'all' || before.width < 50 || before.height < 50) fitDiagram();
+          else if (target === 'moved') {
+            // Keep the point that was in the middle of the canvas in the middle, at the same zoom.
+            const { x, y, zoom } = rf.getViewport();
+            void rf.setViewport({ zoom, x: width / 2 - (before.width / 2 - x), y: height / 2 - (before.height / 2 - y) });
+          } else fitIds(target, 0);
+        });
       }
       previous = {width, height};
     });
     observer.observe(canvas.current);
     return () => { observer.disconnect(); cancelAnimationFrame(frame); };
-  }, [fitDiagram]);
+  }, [fitDiagram, fitIds, rf]);
   const key = useMemo(() => snapshotKey(graph), [graph]);
   const shown = useMemo(() => visibleGraph(graph, showJunctions, reveal), [graph, showJunctions, reveal]);
   const detail = tier === 'detail';
   const clustered = tier === 'overview' || tier === 'domains';
-  const aggregate = useMemo(() => domainAggregates(shown.tables, shown.relations), [shown]);
+  const focusId = hovered ?? reveal;
+  // Lines to and from hubs are the bulk of a large schema's edges. They are hidden unless asked for,
+  // or unless one of their ends is the table being hovered or was just searched for. Lines between
+  // two hubs stay: there are few, and they show how the shared core hangs together.
+  const drawn = useMemo(() => shown.relations.filter(r => showHubEdges
+    || !(hubs.has(r.source) || hubs.has(r.target)) || (hubs.has(r.source) && hubs.has(r.target))
+    || r.source === focusId || r.target === focusId), [shown, showHubEdges, hubs, focusId]);
+  const hubRefs = useMemo(() => {
+    const refs = new Map<string, Map<string, boolean>>();
+    for (const r of allRelations) {
+      if (!hubs.has(r.target) || r.source === r.target) continue;
+      const own = refs.get(r.source) || new Map<string, boolean>();
+      // Declared wins: a tag is marked inferred only when every link behind it is a naming guess.
+      own.set(r.target, (own.get(r.target) ?? true) && r.kind === 'inferred by naming');
+      refs.set(r.source, own);
+    }
+    return new Map([...refs].map(([id, own]) => [id, [...own].sort(([a], [b]) => a.localeCompare(b)).map(([hub, inferred]) => ({ id: hub, inferred }))]));
+  }, [allRelations, hubs]);
+  const referrers = useMemo(() => {
+    const counts = new Map<string, Set<string>>();
+    for (const r of allRelations) if (hubs.has(r.target) && r.source !== r.target) counts.set(r.target, (counts.get(r.target) || new Set<string>()).add(r.source));
+    return new Map([...counts].map(([id, from]) => [id, from.size]));
+  }, [allRelations, hubs]);
+  const aggregate = useMemo(() => domainAggregates(shown.tables, drawn, groupOf), [shown, drawn, groupOf]);
   const boxes = useMemo(() => domainBounds(aggregate.domains, positions), [aggregate, positions]);
-  const domainOf = useMemo(() => new Map(shown.tables.map(entry => [entry.id, entry.domain || 'Other'])), [shown]);
+  const domainOf = useMemo(() => new Map(shown.tables.map(entry => [entry.id, groupOf(entry)])), [shown, groupOf]);
   domainOfRef.current = domainOf;
   // A table is on the canvas whenever the diagram is past the clustered tiers, or while its own
   // domain is expanded. Bubbles and tables share one coordinate space, so nothing has to move.
@@ -203,8 +282,8 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
   useEffect(() => { setExpanded(new Set()); }, [key]);
   const updatePositions = useCallback((next: Positions, persist = false) => {
     positionsRef.current = next; setPositions(next);
-    if (persist && !savePositions(key, next)) setStatus('Layout storage unavailable; positions remain in this session.');
-  }, [key]);
+    if (persist && !savePositions(key, next, groupBy)) setStatus('Layout storage unavailable; positions remain in this session.');
+  }, [key, groupBy]);
   const togglePin = useCallback((id: string) => {
     const current = positionsRef.current;
     updatePositions({ ...current, [id]: { ...current[id], pinned: !current[id].pinned } }, true);
@@ -234,15 +313,27 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
     revealAndFit(nearby.length ? nearby : [id], around);
     onSelectTable(id);
   }, [graph, shown, domainOf, revealAndFit, onSelectTable]);
+  // Cards call focus through a ref, so a new focus callback does not rebuild every node.
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
   const nodes: DiagramNode[] = useMemo(() => {
     const tables: TableNode[] = shown.tables.map(table => {
-      const size = nodeSize(table), height = detail ? size.height : 76;
+      const size = nodeSize(table), refs = showHubEdges ? [] : hubRefs.get(table.id) || [];
+      const height = (detail ? size.height : 76) + (refs.length ? HUB_ROW : 0);
       return { id: table.id, type: 'table', position: positions[table.id] || { x: 0, y: 0 },
         hidden: !tableShown(table.id), width: size.width, height, style: { width: size.width, height },
         data: { table, detailed: detail, pinned: positions[table.id]?.pinned || false,
-          dimmed: !!hovered && !neighbors.has(table.id), togglePin, foreign: foreign.get(table.id) || new Set() } };
+          dimmed: !!hovered && !neighbors.has(table.id), togglePin, foreign: foreign.get(table.id) || new Set(),
+          hubRefs: refs, referrers: referrers.get(table.id), openHub: id => focusRef.current(id) } };
     });
-    if (!clustered) return tables;
+    const frame = (index: number): FrameNode => {
+      const domain = aggregate.domains[index], box = boxes[index];
+      return { id: `__lerd_frame_${domain.id}`, type: 'frame', position: { x: box.x, y: box.y },
+        width: box.width, height: box.height, style: { width: box.width, height: box.height },
+        draggable: false, selectable: false, focusable: false, zIndex: -1,
+        data: { name: domain.id, count: domain.tables.length, zoom } };
+    };
+    if (!clustered) return [...aggregate.domains.map((_, index) => frame(index)), ...tables];
     const domainNodes: DomainNode[] = aggregate.domains.map((domain, index) => {
       const box = boxes[index], open = expanded.has(domain.id);
       return { id: bubbleId(domain.id), type: 'domain', position: { x: box.x, y: box.y },
@@ -256,18 +347,19 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
           toggle: () => toggleDomain(domain.id) } };
     });
     // Bubbles first so an expanded domain's tables paint over a neighbour's outline.
-    return [...domainNodes, ...tables];
+    const frames = aggregate.domains.flatMap((domain, index) => expanded.has(domain.id) ? [frame(index)] : []);
+    return [...frames, ...domainNodes, ...tables];
   }, [shown, positions, clustered, detail, hovered, neighbors, togglePin, foreign, zoom, tier,
-    aggregate, boxes, expanded, tableShown, toggleDomain]);
+    aggregate, boxes, expanded, tableShown, toggleDomain, showHubEdges, hubRefs, referrers]);
   const edges: DiagramEdge[] = useMemo(() => {
-    const plan = planErdEdges(shown.relations, id => tableShown(id) ? id : bubbleId(domainOf.get(id) || 'Other'));
+    const plan = planErdEdges(drawn, id => tableShown(id) ? id : bubbleId(domainOf.get(id) || 'Other'));
     const direct = plan.direct.map((relation): DiagramEdge => ({ id: relation.id, source: relation.source,
       target: relation.target, type: 'relationship',
       data: { relation, markerPrefix, dimmed: !!hovered && relation.source !== hovered && relation.target !== hovered } }));
     const ribbons = plan.ribbons.map((ribbon): DiagramEdge => ({ id: ribbon.id, source: ribbon.source,
       target: ribbon.target, type: 'ribbon', data: { ribbon, zoom } }));
     return [...ribbons, ...direct];
-  }, [shown, tableShown, domainOf, markerPrefix, hovered, zoom]);
+  }, [drawn, tableShown, domainOf, markerPrefix, hovered, zoom]);
   const matches = useMemo(() => query.trim() ? graph.tables.filter(t => `${t.id} ${t.name || ''} ${t.domain}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 25) : [], [graph, query]);
   const onNodesChange = useCallback((changes: NodeChange<DiagramNode>[]) => {
     const next = { ...positionsRef.current }; let changed = false;
@@ -276,8 +368,17 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
     }
     if (changed) updatePositions(next);
   }, [updatePositions]);
+  const regroup = (mode: GroupMode) => {
+    const nextGroups = tableGroups(graph, mode, hubs);
+    const next = layoutTables(graph, positionsRef.current, false, table => nextGroups.get(table.id) || 'Other', HUB_GROUP);
+    setGroupBy(mode); setExpanded(new Set());
+    positionsRef.current = next; setPositions(next);
+    setStatus(savePositions(key, next, mode) ? `Grouped by ${GROUP_LABELS[mode].toLowerCase()}; pinned positions retained.`
+      : 'Layout storage unavailable; positions remain in this session.');
+    requestAnimationFrame(() => fitDiagram(350));
+  };
   const relayout = () => {
-    const next = layoutTables(graph, positionsRef.current, false);
+    const next = layoutTables(graph, positionsRef.current, false, groupOf, HUB_GROUP);
     updatePositions(next, true); setStatus('Layout refreshed; pinned positions retained.');
     requestAnimationFrame(() => fitDiagram(350));
   };
@@ -296,9 +397,14 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
     <div className="lerd-toolbar">
       <form className="lerd-search" onSubmit={e => { e.preventDefault(); if (matches[0]) focus(matches[0].id); }}>
         <Search size={16} aria-hidden="true" /><input aria-label="Search tables" placeholder="Search tables" value={query} onFocus={() => setSearchOpen(true)} onChange={e => { setQuery(e.target.value); setSearchOpen(true); }} onKeyDown={e => { if (e.key === 'Escape') setSearchOpen(false); }} />
-        {searchOpen && query.trim() && <div className="lerd-search-results">{matches.length ? matches.map(table => <button key={table.id} type="button" onClick={() => focus(table.id)}><span>{table.id}</span><small>{table.domain}</small></button>) : <span>No matching tables</span>}</div>}
+        {searchOpen && query.trim() && <div className="lerd-search-results">{matches.length ? matches.map(table => <button key={table.id} type="button" onClick={() => focus(table.id)}><span>{table.id}</span><small>{groups.get(table.id) || table.domain}</small></button>) : <span>No matching tables</span>}</div>}
       </form>
       <label className="lerd-toggle"><input type="checkbox" checked={showJunctions} onChange={e => { setShowJunctions(e.target.checked); setReveal(undefined); }} />Show junctions</label>
+      {hubs.size > 0 && <label className="lerd-toggle" title={`Lines to the ${hubs.size} most referenced tables (${[...hubs].join(', ')}) are drawn as tags on each card unless this is on.`}><input type="checkbox" checked={showHubEdges} onChange={e => setShowHubEdges(e.target.checked)} />Show hub lines</label>}
+      <label className="lerd-group-by" title="Name prefix uses each table's domain from the snapshot. Relationships groups tables joined by declared foreign keys; the grouping is inferred from those keys, not declared by the database.">Group by
+        <select value={groupBy} onChange={e => regroup(e.target.value as GroupMode)}>
+          <option value="prefix">{GROUP_LABELS.prefix}</option><option value="relationships">{GROUP_LABELS.relationships}</option>
+        </select></label>
       <div className="lerd-actions">
         <output className="lerd-tier" title="The level of detail the current zoom is showing. Zooming past a boundary changes it; the boundaries have a margin so a diagram parked on one does not flicker.">{TIER_LABELS[tier]}</output>
         {clustered && <button className="lerd-icon" title="Open every domain" aria-label="Open every domain"
@@ -306,9 +412,9 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
           onClick={() => setExpanded(new Set(aggregate.domains.map(domain => domain.id)))}><Maximize2 size={17} /></button>}
         {clustered && <button className="lerd-icon" title="Close every domain" aria-label="Close every domain"
           disabled={!expanded.size} onClick={() => setExpanded(new Set())}><Minimize2 size={17} /></button>}
-        <button className="lerd-icon" title="Zoom out" aria-label="Zoom out" onClick={() => { void rf.zoomOut({ duration: 200 }); }}><ZoomOut size={17} /></button>
+        <button className="lerd-icon" title="Zoom out" aria-label="Zoom out" onClick={() => { framed.current = 'moved'; void rf.zoomOut({ duration: 200 }); }}><ZoomOut size={17} /></button>
         <output className="lerd-zoom">{Math.round(zoom * 100)}%</output>
-        <button className="lerd-icon" title="Zoom in" aria-label="Zoom in" onClick={() => { void rf.zoomIn({ duration: 200 }); }}><ZoomIn size={17} /></button>
+        <button className="lerd-icon" title="Zoom in" aria-label="Zoom in" onClick={() => { framed.current = 'moved'; void rf.zoomIn({ duration: 200 }); }}><ZoomIn size={17} /></button>
         <button className="lerd-icon" title="Fit diagram" aria-label="Fit diagram" onClick={() => fitDiagram(300)}><Expand size={17} /></button>
         <button className="lerd-icon" title="Refresh force layout (keep pins)" aria-label="Refresh force layout" onClick={relayout}><RotateCcw size={17} /></button>
         <button className="lerd-icon" title="Unpin all tables" aria-label="Unpin all tables" onClick={() => updatePositions(Object.fromEntries(Object.entries(positionsRef.current).map(([id, p]) => [id, { ...p, pinned: false }])), true)}><LocateFixed size={17} /></button>
@@ -321,10 +427,10 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
         onNodeDoubleClick={(_, node) => {
           if (node.type === 'table') focus(node.id);
           else revealAndFit((aggregate.domains.find(domain => bubbleId(domain.id) === node.id)?.tables || []).map(entry => entry.id));
-        }} onNodeMouseEnter={(_, node) => { if (node.type === 'table') setHovered(node.id); }} onNodeMouseLeave={() => setHovered(null)} onPaneClick={() => { setHovered(null); setSearchOpen(false); }} onMove={(_, viewport) => { setZoom(viewport.zoom); setTier(current => erdTier(viewport.zoom, current)); }} onInit={() => { requestAnimationFrame(() => fitDiagram()); }} fitView fitViewOptions={{ padding: 0.12, maxZoom: 1, minZoom: 0.001 }} minZoom={0.001} maxZoom={2.6} nodesConnectable={false} edgesFocusable={false} deleteKeyCode={null} colorMode={colorMode} proOptions={{ hideAttribution: true }}>
+        }} onNodeMouseEnter={(_, node) => { if (node.type === 'table') setHovered(node.id); }} onNodeMouseLeave={() => setHovered(null)} onPaneClick={() => { setHovered(null); setSearchOpen(false); }} onMoveStart={event => { if (event) framed.current = 'moved'; }} onMove={(_, viewport) => { setZoom(viewport.zoom); setTier(current => erdTier(viewport.zoom, current)); }} onInit={() => { requestAnimationFrame(() => fitDiagram()); }} fitView fitViewOptions={{ padding: 0.12, maxZoom: 1, minZoom: 0.001 }} minZoom={0.001} maxZoom={2.6} nodesConnectable={false} edgesFocusable={false} deleteKeyCode={null} colorMode={colorMode} proOptions={{ hideAttribution: true }}>
         <Background color="var(--line)" gap={28} size={1} />
         <MiniMap className="lerd-minimap lerd-export-exclude" pannable zoomable ariaLabel="Diagram minimap"
-          nodeClassName={node => node.type === 'domain' ? 'lerd-minimap-domain' : 'lerd-minimap-table'} />
+          nodeClassName={node => node.type === 'domain' ? 'lerd-minimap-domain' : node.type === 'frame' ? 'lerd-minimap-frame' : 'lerd-minimap-table'} />
       </ReactFlow>
       <svg className="lerd-markers" aria-hidden="true"><defs>
         <marker id={`${markerPrefix}-many`} markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M1 1 L11 7 L1 13 M1 7 H11" fill="none" stroke="var(--accent)" strokeWidth="1.4" /></marker>
@@ -332,7 +438,7 @@ function Diagram({ graph, onSelectTable }: ViewProps) {
       </defs></svg>
       {!graph.tables.length && <div className="lerd-empty">No tables available.</div>}
     </div>
-    <footer className="lerd-footer"><span>{graph.tables.length} tables · {shown.hidden.size} junctions collapsed{clustered ? ` · ${expanded.size} of ${aggregate.domains.length} domains open` : ''}</span><span className="lerd-legend"><i /> Declared FK <i className="lerd-inferred" /> Inferred <i className="lerd-junction" /> N:M <span>? Unknown</span></span><span role="status">{status}</span></footer>
+    <footer className="lerd-footer"><span>{graph.tables.length} tables · {shown.hidden.size} junctions collapsed{clustered ? ` · ${expanded.size} of ${aggregate.domains.length} groups open` : ''}{hubs.size && !showHubEdges ? ` · ${hubs.size} hub tables: their lines shown as tags` : ''} · Groups: {groupBy === 'prefix' ? 'name prefix' : 'inferred from declared keys'}</span><span className="lerd-legend"><i /> Declared FK <i className="lerd-inferred" /> Inferred <i className="lerd-junction" /> N:M <span>? Unknown</span></span><span role="status">{status}</span></footer>
   </section>;
 }
 export default function LivingERD(props: ViewProps) {

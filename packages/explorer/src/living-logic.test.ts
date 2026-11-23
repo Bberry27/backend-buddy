@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { SchemaGraph, SchemaLink, SchemaTable } from './types';
-import { ERD_TIER_EDGES, ERD_TIER_HYSTERESIS, domainAggregates, domainBounds, domainCells, erdTier, junctions, knownRows, layoutTables, neighborhood, nodeSize, parsePositions, planErdEdges, relations, rowLabel, serializePositions, snapshotKey, visibleGraph } from './living-logic';
+import { ERD_TIER_EDGES, ERD_TIER_HYSTERESIS, HUB_GROUP, HUB_MIN_TABLES, UNCONNECTED_GROUP, attachedGroup, defaultGroupMode, domainAggregates, domainBounds, erdTier, hubTables, packGroups, parseGroupMode, tableGroups, junctions, knownRows, layoutTables, neighborhood, nodeSize, parsePositions, planErdEdges, relations, rowLabel, serializePositions, snapshotKey, visibleGraph } from './living-logic';
 
 const table = (id: string, override: Partial<SchemaTable> = {}): SchemaTable => ({ id, className: id, domain: 'Operations', type: 'table', pk: 'id', primaryKey: ['id'], allColumns: [{ name: 'id', type: 'int', pk: true, fk: '', nullable: 'False', index: false, unique: false }], indexes: [], uniques: [], ...override });
 const fk = (source: string, target: string, column: string, constraintId?: string): SchemaLink => ({ source, target, column, targetColumn: 'id', kind: 'declared FK', constraintId });
@@ -196,19 +196,6 @@ test('F05 edges resolve to whatever stands in for each endpoint, and never insid
   assert.deepEqual(expanded.ribbons, []);
 });
 
-test('F05 domain cells are disjoint and grow with the tables they must hold', () => {
-  const cells = domainCells([{ id: 'small', area: 1e5 }, { id: 'big', area: 4e6 }, { id: 'mid', area: 8e5 }]);
-  const big = cells.find(c => c.id === 'big')!, small = cells.find(c => c.id === 'small')!;
-  assert.ok(big.width > small.width, 'a domain with more tables needs a bigger cell');
-  for (const [index, a] of cells.entries()) {
-    assert.ok(a.width > 0 && a.height > 0);
-    for (const b of cells.slice(index + 1)) {
-      assert.ok(!(a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y),
-        `cells ${a.id} and ${b.id} overlap`);
-    }
-  }
-});
-
 test('F05 laid-out domains produce bubbles that do not overlap each other', () => {
   // The clustered tiers draw one bubble around each domain's tables. Overlapping bubbles were the
   // symptom of a layout that never grouped the domains, so the invariant is asserted here.
@@ -234,4 +221,126 @@ test('F05 laid-out domains produce bubbles that do not overlap each other', () =
         `domain bubbles ${a.id} and ${b.id} overlap`);
     }
   }
+});
+
+// --- Grouping and hubs (F05) -------------------------------------------------------------------
+// A synthetic schema shaped like the ones that broke the old layout: two tables nearly everything
+// refers to, a few real clusters behind them, and names whose prefixes say nothing useful.
+const hubSchema = (): SchemaGraph => {
+  const tables: SchemaTable[] = [table('owners', { domain: 'Other' }), table('accounts', { domain: 'Other' })];
+  const links: SchemaLink[] = [fk('accounts', 'owners', 'owner_id', 'acc_owner')];
+  const clusters = { alpha: 6, beta: 5, gamma: 4 };
+  for (const [name, size] of Object.entries(clusters)) {
+    for (let index = 0; index < size; index++) {
+      const id = `${name}_${index}`;
+      tables.push(table(id, { domain: index % 2 ? 'Other' : name }));
+      links.push(fk(id, 'owners', 'owner_id', `${id}_owner`), fk(id, 'accounts', 'account_id', `${id}_account`));
+      if (index) links.push(fk(id, `${name}_0`, 'parent_id', `${id}_parent`));
+    }
+  }
+  // Tables that only hang off a hub, one with two keys into it, and one with no keys at all.
+  for (let index = 0; index < 8; index++) links.push(fk(`satellite_${index}`, index < 5 ? 'owners' : 'accounts', 'owner_id', `sat_${index}`));
+  for (let index = 0; index < 8; index++) tables.push(table(`satellite_${index}`, { domain: 'Other' }));
+  links.push(fk('satellite_0', 'owners', 'approver_id', 'sat_0_approver'));
+  tables.push(table('loner', { domain: 'Other' }));
+  // A naming guess between two clusters must not merge them.
+  links.push({ source: 'beta_1', target: 'gamma_0', column: 'gamma_id', targetColumn: 'id', kind: 'inferred by naming' });
+  return { tables, links };
+};
+const overlapping = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+  a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+test('F05 hubs are the tables a tenth of the schema refers to, counted once per referring table', () => {
+  const value = hubSchema();
+  assert.ok(value.tables.length >= HUB_MIN_TABLES);
+  assert.deepEqual([...hubTables(value.tables, relations(value))], ['accounts', 'owners']);
+  // A second key from the same table does not make it count twice, and a self-reference never counts.
+  const doubled = { ...value, links: [...value.links, fk('gamma_0', 'gamma_0', 'self_id', 'self'), fk('beta_0', 'gamma_0', 'other_id', 'x1'), fk('beta_0', 'gamma_0', 'third_id', 'x2')] };
+  assert.equal(hubTables(doubled.tables, relations(doubled)).has('gamma_0'), false);
+  // A small schema has no hubs: every line in it is readable.
+  const small = { tables: value.tables.slice(0, HUB_MIN_TABLES - 1), links: value.links };
+  assert.equal(hubTables(small.tables, relations(small)).size, 0);
+});
+
+test('F05 the default grouping follows the prefixes only while they actually group the schema', () => {
+  assert.equal(defaultGroupMode(hubSchema().tables), 'relationships');
+  assert.equal(defaultGroupMode(['a', 'b', 'c', 'd'].map(id => table(id, { domain: 'Billing' }))), 'prefix');
+  assert.equal(defaultGroupMode([...['a', 'b', 'c'].map(id => table(id, { domain: 'Billing' })), table('d', { domain: '' })]), 'relationships');
+  assert.equal(defaultGroupMode([]), 'prefix');
+});
+
+test('F05 relationship groups come from declared keys with the hubs set aside', () => {
+  const value = hubSchema();
+  const hubs = hubTables(value.tables, relations(value));
+  const groups = tableGroups(value, 'relationships', hubs);
+  assert.equal(groups.size, value.tables.length);
+  for (const hub of hubs) assert.equal(groups.get(hub), HUB_GROUP);
+  // Each real cluster is one group, named after its most connected member, and the naming guess
+  // between beta and gamma did not merge them.
+  for (const [name, size] of [['alpha', 6], ['beta', 5], ['gamma', 4]] as const) {
+    const ids = Array.from({ length: size }, (_, index) => `${name}_${index}`);
+    assert.deepEqual(new Set(ids.map(id => groups.get(id))), new Set([`${name}_0`]), name);
+  }
+  // Tables whose only keys point at a hub sit with that hub; the one with no keys is unconnected.
+  assert.equal(groups.get('satellite_0'), attachedGroup('owners'));
+  assert.equal(groups.get('satellite_6'), attachedGroup('accounts'));
+  assert.equal(groups.get('loner'), UNCONNECTED_GROUP);
+  // The prefix grouping keeps the snapshot's domains, apart from the hubs.
+  const prefix = tableGroups(value, 'prefix', hubs);
+  assert.equal(prefix.get('owners'), HUB_GROUP);
+  assert.equal(prefix.get('alpha_0'), 'alpha');
+  assert.equal(prefix.get('alpha_1'), 'Other');
+});
+
+test('F05 packed groups never overlap, and the first group named leads', () => {
+  const sizes = [{ id: 'wide', width: 5000, height: 300 }, { id: 'a', width: 900, height: 700 },
+    { id: 'b', width: 400, height: 1600 }, { id: 'hubs', width: 600, height: 300 }, { id: 'c', width: 300, height: 300 }];
+  const boxes = packGroups(sizes, (x, y) => (x === 'a' && y === 'c') || (x === 'c' && y === 'a') ? 5 : 0, 'hubs');
+  assert.equal(boxes[0].id, 'hubs');
+  assert.deepEqual(boxes.map(box => box.id).sort(), sizes.map(size => size.id).sort());
+  for (const [index, a] of boxes.entries()) {
+    assert.deepEqual([a.width, a.height], [sizes.find(size => size.id === a.id)!.width, sizes.find(size => size.id === a.id)!.height]);
+    for (const b of boxes.slice(index + 1)) assert.ok(!overlapping(a, b), `${a.id} and ${b.id} overlap`);
+  }
+});
+
+test('F05 group bubbles do not overlap on a hub-heavy schema, in either grouping', () => {
+  // The regression: one simulation over every table let the hubs pull their referrers across the
+  // canvas, so a fifth of the domain bubbles overlapped on a real schema.
+  const value = hubSchema();
+  const hubs = hubTables(value.tables, relations(value));
+  for (const mode of ['prefix', 'relationships'] as const) {
+    const groups = tableGroups(value, mode, hubs);
+    const groupOf = (entry: SchemaTable) => groups.get(entry.id)!;
+    const positions = layoutTables(value, {}, false, groupOf, HUB_GROUP);
+    assert.deepEqual(layoutTables(value, {}, false, groupOf, HUB_GROUP), positions, 'layout is deterministic');
+    const boxes = domainBounds(domainAggregates(value.tables, relations(value), groupOf).domains, positions);
+    for (const [index, a] of boxes.entries()) {
+      for (const b of boxes.slice(index + 1)) assert.ok(!overlapping(a, b), `${mode}: ${a.id} and ${b.id} overlap`);
+    }
+    for (const [index, a] of value.tables.entries()) for (const b of value.tables.slice(index + 1)) {
+      assert.ok(!overlapping({ ...positions[a.id], ...nodeSize(a) }, { ...positions[b.id], ...nodeSize(b) }), `${mode}: ${a.id} and ${b.id} overlap`);
+    }
+  }
+});
+
+test('F05 pinned tables keep their place and newly laid-out groups are packed clear of them', () => {
+  const value = hubSchema();
+  const pinned = { alpha_3: { x: 40, y: 9000, pinned: true } };
+  const positions = layoutTables(value, pinned, false);
+  assert.deepEqual(positions.alpha_3, pinned.alpha_3);
+  const size = nodeSize(value.tables.find(entry => entry.id === 'alpha_3')!);
+  for (const entry of value.tables) if (entry.id !== 'alpha_3') {
+    assert.ok(!overlapping({ ...positions[entry.id], ...nodeSize(entry) }, { ...pinned.alpha_3, ...size }), entry.id);
+  }
+});
+
+test('F05 the grouping is saved with the layout and an older layout reads as having none', () => {
+  const positions = { a: { x: 1, y: 2, pinned: true } };
+  assert.equal(parseGroupMode(serializePositions(positions, 'relationships')), 'relationships');
+  assert.deepEqual({ ...parsePositions(serializePositions(positions, 'relationships'), ['a']) }, positions);
+  assert.equal(serializePositions(positions), JSON.stringify({ version: 1, positions }));
+  assert.equal(parseGroupMode(serializePositions(positions)), undefined);
+  assert.equal(parseGroupMode(JSON.stringify({ version: 1, positions, groupBy: 'anything' })), undefined);
+  assert.equal(parseGroupMode('not json'), undefined);
 });
