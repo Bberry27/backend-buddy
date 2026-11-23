@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **F05** Living ERD stays readable on large catalogs. Groups are laid out separately and
+  packed whole, so group outlines no longer overlap. The few tables most others refer to
+  become a `Shared hubs` group, and their lines are replaced by tags on the referring cards
+  unless hovered, searched, or turned on with "Show hub lines". A "Group by" control adds
+  grouping by declared relationships, chosen by default when name prefixes leave a quarter
+  of the tables ungrouped. Open groups draw a labelled outline, and opening the inspector or
+  zooming across a tier no longer throws the view back to the whole diagram.
+
 ### Security
 
 - **R00** The private-data guard gained a `path:coverage-data` rule and now rejects

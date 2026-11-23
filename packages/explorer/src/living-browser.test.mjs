@@ -16,6 +16,9 @@ const result = await build({ stdin: { contents: `
   const table = (id, rowCount) => ({id,rowCount,name:id,className:id,domain:id==='isolated'?'Finance':'Operations',type:'table',pk:'id',primaryKey:['id'],allColumns:[col('id',true),col('name')],indexes:[],uniques:[]});
   const fk=(source,target,column='parent_id')=>({source,target,column,targetColumn:'id',kind:'declared FK'});
   const graph={project:{key:'living-browser',name:'Browser fixture',dialect:'postgres'},source:{hash:'snapshot-a'},tables:[table('accounts',10),table('bookings',40),table('isolated'),{...table('account_bookings'),primaryKey:['account_id','booking_id'],allColumns:[col('account_id'),col('booking_id')]}],links:[fk('bookings','accounts'),fk('account_bookings','accounts','account_id'),fk('account_bookings','bookings','booking_id')]};
+  const hubTables=[table('core'),...Array.from({length:29},(_,i)=>({...table('t'+i),domain:'Other'}))];
+  const hubLinks=[...Array.from({length:20},(_,i)=>fk('t'+i,'core','core_id')),...Array.from({length:9},(_,i)=>fk('t'+(i+1),'t'+i,'left_id')),...Array.from({length:9},(_,i)=>fk('t'+(i+11),'t'+(i+10),'right_id'))];
+  window.hubFixture={project:{key:'living-hubs',name:'Hub fixture',dialect:'postgres'},source:{hash:'hubs-a'},tables:hubTables,links:hubLinks};
   window.fixture=graph; window.selected=[];const root=createRoot(document.getElementById('root'));window.show=(value=graph)=>root.render(<LivingERD graph={value} onSelectTable={id=>window.selected.push(id)}/>);window.show();
 `, resolveDir: directory, loader: 'tsx' }, bundle: true, write: false, format: 'iife', outfile: 'living-qa.js', logLevel: 'silent' });
 const js = result.outputFiles.find(file => file.path.endsWith('.js')).text;
@@ -28,6 +31,9 @@ const page = await browser.newPage({acceptDownloads:true,viewport:{width:1366,he
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const requests=[];page.on('request',request=>requests.push(request.url()));
 const url=`http://127.0.0.1:${server.address().port}`;
+// Arriving at a table frames it with its neighbours, below the column tier, so the column checks
+// zoom in until the toolbar says the columns are showing.
+const toDetail = async () => { for (let i = 0; i < 12 && (await page.locator('.lerd-tier').textContent()) !== 'Columns'; i++) { await page.getByRole('button',{name:'Zoom in',exact:true}).click(); await page.waitForTimeout(230); } };
 const search = async text => { await page.getByRole('textbox',{name:'Search tables'}).fill(text);await page.getByRole('textbox',{name:'Search tables'}).press('Enter');await page.waitForTimeout(500); };
 try {
   await page.goto(url);await page.locator('.lerd-table').first().waitFor();await page.waitForTimeout(350);
@@ -39,7 +45,7 @@ try {
   assert.equal(await page.getByText('Rows unknown',{exact:true}).count(),1);
   await page.getByLabel('Show junctions').check();assert.equal(await page.locator('.lerd-table').count(),4);
   await page.getByLabel('Show junctions').uncheck();assert.equal(await page.locator('.lerd-table').count(),3);
-  await search('accounts');assert.equal(await page.locator('.lerd-columns').count(),3);
+  await search('accounts');await toDetail();assert.equal(await page.locator('.lerd-columns').count(),3);
   assert.equal(await page.locator('.lerd-samples').first().locator('code').count(),3);
   assert.deepEqual(await page.evaluate(()=>window.selected),['accounts']);
   const account=page.locator('.react-flow__node[data-id="accounts"]');
@@ -48,7 +54,7 @@ try {
   await page.mouse.move(bounds.x+25,bounds.y+15);await page.mouse.down();await page.mouse.move(bounds.x+105,bounds.y+85,{steps:8});await page.mouse.up();
   await page.waitForTimeout(200);
   await page.getByRole('button',{name:'Unpin accounts',exact:true}).waitFor({timeout:3000});
-  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(key=>key.startsWith('living-erd:')))));
+  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(key=>key.startsWith('backend-buddy-erd:')))));
   assert.equal(saved.positions.accounts.pinned,true);
   await page.reload();await page.locator('.lerd-table').first().waitFor();await search('accounts');
   await page.getByRole('button',{name:'Unpin accounts',exact:true}).waitFor();
@@ -82,7 +88,23 @@ try {
   assert.equal(requests.some(request=>!request.startsWith(url)&&!request.startsWith('data:')),false,JSON.stringify(requests));
   await page.evaluate(()=>{document.documentElement.style.cssText='--bg:#fff;--panel:#f5f6f7;--raised:#e5e9ed;--ink:#151a1e;--muted:#515d69;--line:#c7ced5;--accent:#087d69';});
   if(process.env.LIVING_SCREENSHOT)await page.screenshot({path:process.env.LIVING_SCREENSHOT.replace('.png','-light.png')});
+  // F05 hubs and grouping: one table everything refers to, two clusters behind it, no useful prefixes.
+  await page.evaluate(()=>window.show(window.hubFixture));await page.locator('.lerd-domain').first().waitFor();await page.waitForTimeout(400);
+  assert.equal(await page.getByRole('combobox',{name:/Group by/}).inputValue(),'relationships','prefixes that group nothing open on relationships');
+  const bubbles=await page.locator('.lerd-domain').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().toJSON()));
+  assert.ok(bubbles.length>=3,JSON.stringify(bubbles));
+  for(const [i,a] of bubbles.entries())for(const b of bubbles.slice(i+1))assert.ok(!(a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top),'group bubbles overlap: '+JSON.stringify([a,b]));
+  await page.getByRole('button',{name:'Open every domain',exact:true}).click();await page.waitForTimeout(400);
+  assert.equal(await page.locator('.lerd-hub-ref').count(),20,'each referrer carries a tag for the hub instead of a line');
+  const quiet=await page.locator('.react-flow__edge').count();
+  await page.getByLabel('Show hub lines').check();await page.waitForTimeout(300);
+  assert.equal(await page.locator('.react-flow__edge').count(),quiet+20,'turning hub lines on draws one line per hub reference');
+  assert.equal(await page.locator('.lerd-hub-ref').count(),0,'tags give way to the lines they stand for');
+  await page.getByLabel('Show hub lines').uncheck();
+  await page.getByRole('combobox',{name:/Group by/}).selectOption('prefix');await page.waitForTimeout(500);
+  assert.equal(await page.getByText(/Groups: name prefix/).count(),1);
+  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(key=>key.includes('living-hubs')))).groupBy),'prefix','the grouping is saved with the layout');
   await page.evaluate(()=>window.show({tables:[],links:[]}));await page.getByText('No tables available.',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
-  console.log('Living ERD browser checks passed: nonblank render, semantic zoom, junction toggle/search, hover, drag/pin, reload/snapshot isolation, mobile containment, SVG/PNG exports and offline requests.');
+  console.log('Living ERD browser checks passed: nonblank render, semantic zoom, junction toggle/search, hover, drag/pin, reload/snapshot isolation, mobile containment, SVG/PNG exports, offline requests, hub tags and grouping.');
 } catch(error) { console.log('Browser errors',errors);if(process.env.LIVING_SCREENSHOT)await page.screenshot({path:process.env.LIVING_SCREENSHOT.replace('.png','-failure.png')});throw error; } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
