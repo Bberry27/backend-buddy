@@ -101,7 +101,8 @@ SELECT n.nspname AS schema_name,
        i.indisunique AS is_unique,
        i.indpred IS NOT NULL AS is_partial,
        i.indexprs IS NOT NULL AS has_expression,
-       i.indkey AS key_attnums
+       i.indkey AS key_attnums,
+       pg_get_expr(i.indpred, i.indrelid) AS predicate
   FROM pg_index i
   JOIN pg_class c ON c.oid = i.indrelid
   JOIN pg_class ic ON ic.oid = i.indexrelid
@@ -381,7 +382,7 @@ def introspect(connection, schemas: list[str]) -> dict[str, Any]:
                 'ondelete': action,
             })
 
-    for schema, name, index_name, is_unique, is_partial, has_expression, key_attnums in raw_indexes:
+    for schema, name, index_name, is_unique, is_partial, has_expression, key_attnums, predicate in raw_indexes:
         identifier = table_id(schema, name)
         table = tables.get(identifier)
         if table is None:
@@ -393,6 +394,12 @@ def introspect(connection, schemas: list[str]) -> dict[str, Any]:
         entry: dict[str, Any] = {'name': index_name, 'columns': columns, 'unique': bool(is_unique)}
         if is_partial:
             entry['partial'] = True
+            # The filter as PostgreSQL prints it, for example (parent_id IS NOT NULL). Display-only:
+            # it lets the views tell an index that covers every lookup by its key from one that
+            # covers a subset of rows. Never executed. A filter too long for the contract's
+            # 4096-character display cap is left out rather than cut, so it reads as not recorded.
+            if predicate and len(str(predicate)) <= 4096:
+                entry['predicate'] = str(predicate)
         if has_expression or 0 in parts:
             entry['expression'] = True
         table['indexes'].append(entry)
@@ -462,7 +469,8 @@ def main() -> None:
         basis.append(REDUNDANT_BASIS.format(count=redundant))
 
     snapshot = {
-        'contractVersion': '1.0',
+        # 1.1: index entries may carry `predicate`, the filter of a partial index.
+        'contractVersion': '1.1',
         'project': {
             'name': args.name or dbname,
             'key': project_key(dbname),

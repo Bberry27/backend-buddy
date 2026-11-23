@@ -66,6 +66,22 @@ test('partial, expression, and column-only index metadata do not prove FK covera
   assert.match(facts.get('parent_id')!.indexDescription, /order is unknown/);
 });
 
+test('F03 a partial index that only excludes NULL keys covers its FK; any other filter does not', () => {
+  const guarded = tableColumnFacts(table({ indexes: [{ name: 'ix_parent', columns: ['parent_id'], partial: true, predicate: '(parent_id IS NOT NULL)' }] }), [fk('parent_id')]);
+  assert.equal(guarded.get('parent_id')?.unindexedDeclared, false);
+  assert.match(guarded.get('parent_id')!.indexDescription, /partial, WHERE \(parent_id IS NOT NULL\), covers lookups by this column/);
+  const filtered = tableColumnFacts(table({ indexes: [{ columns: ['parent_id'], partial: true, predicate: '(other IS NULL)' }] }), [fk('parent_id')]);
+  assert.equal(filtered.get('parent_id')?.unindexedDeclared, true);
+  assert.match(filtered.get('parent_id')!.indexDescription, /WHERE \(other IS NULL\), FK coverage unverified/);
+  // A composite FK is covered by a partial index guarding any of its own columns, in key order.
+  const composite = [fk('tenant_id', 'parent'), fk('parent_id', 'parent')];
+  const both = tableColumnFacts(table({ indexes: [{ columns: ['tenant_id', 'parent_id'], partial: true, predicate: '((tenant_id IS NOT NULL) AND (parent_id IS NOT NULL))' }] }), composite);
+  assert.equal(both.get('tenant_id')?.unindexedDeclared, false);
+  assert.equal(both.get('parent_id')?.unindexedDeclared, false);
+  const outside = tableColumnFacts(table({ indexes: [{ columns: ['tenant_id', 'parent_id'], partial: true, predicate: '(other IS NOT NULL)' }] }), composite);
+  assert.equal(outside.get('parent_id')?.unindexedDeclared, true);
+});
+
 test('primary and composite unique keys carry explicit membership semantics', () => {
   const facts = tableColumnFacts(table({ primaryKey: ['tenant_id', 'parent_id'], uniques: [{ columns: ['parent_id', 'other'] }] }), [fk('tenant_id', 'parent'), fk('parent_id', 'parent')]);
   assert.equal(facts.get('parent_id')?.primary, true);

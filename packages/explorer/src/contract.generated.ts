@@ -197,6 +197,11 @@ export interface SchemaIndex {
   // Whether the index is partial or filtered. Partial indexes are removed from generic full-coverage
   // heuristics.
   partial?: boolean;
+  // Filter condition of a partial index as the source prints it, for example (parent_id IS NOT NULL).
+  // Display-only and never executed (C04). A group with a predicate is partial. When the condition only
+  // requires the leading key columns to be non-null, the views count the index as covering lookups by those
+  // columns; any other condition stays outside full coverage. Added in contract 1.1.
+  predicate?: string;
   // Whether the index is over expressions rather than plain columns. Expression indexes are removed from
   // generic full-coverage heuristics.
   expression?: boolean;

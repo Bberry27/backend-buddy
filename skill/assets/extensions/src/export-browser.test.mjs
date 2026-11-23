@@ -38,9 +38,10 @@ const schema = {
   source: { file: 'synthetic/export-check.json', commit: 'synthetic-0001', sha256: 'synthetic-sha', generated: '2026-02-03T04:05:06Z', basis: 'Synthetic schema for the F19 export browser check. No database was inspected.' },
   tables: [
     table('alpha.widgets', 'Alpha', [column('id', { pk: true }), column('gadget_id', { nullable: 'True' }), column('bin_id'), column('=cmd_id'), column('label', { type: 'text', nullable: '' })], { rowCount: 0 }),
-    table('alpha.gadgets', 'Alpha', [column('id', { pk: true }), column('part_id')]),
+    // F03 B11: a partial index that only excludes NULL keys covers its FK; a filter on another column does not.
+    table('alpha.gadgets', 'Alpha', [column('id', { pk: true }), column('part_id')], { indexes: [{ name: 'ix_gadgets_part', columns: ['part_id'], partial: true, predicate: '(part_id IS NOT NULL)' }] }),
     table('beta.parts', 'Beta', [column('id', { pk: true }), column('widget_id')], { rowCount: 40, indexes: [{ name: 'ix_parts_widget', columns: ['widget_id'] }] }),
-    table('beta.notes', 'Beta', [column('body', { type: 'text' }), column('part_id')], { rowCount: 5 }),
+    table('beta.notes', 'Beta', [column('body', { type: 'text' }), column('part_id')], { rowCount: 5, indexes: [{ name: 'ix_notes_part', columns: ['part_id'], partial: true, predicate: "(body <> '')" }] }),
     table('gamma.loops', 'Gamma', [column('id', { pk: true }), column('parent_id', { nullable: 'True' })], { rowCount: 7, indexes: [{ name: 'ix_loops_parent', columns: ['parent_id'] }] }),
   ],
   links: [
@@ -118,6 +119,12 @@ test('F19 export controls download reports under the offline artifact CSP', { sk
     assert.ok(keysCsv.includes('"\'=cmd_id"'), 'a formula-looking identifier is neutralised');
     assert.ok(!/(^|,)"=/m.test(keysCsv), 'no cell starts with a formula');
     assert.ok(keysCsv.includes('"Inferred reference"') && keysCsv.includes('"Declared FK"'), 'declared and inferred stay distinct');
+    assert.ok(keysCsv.includes('"index_leading","index_partial"'), 'the partial-index column follows index_leading');
+    assert.ok(keysCsv.includes('"alpha.gadgets","part_id","Declared FK","integer","False","beta.parts.id","true","ix_gadgets_part WHERE (part_id IS NOT NULL)"'), 'a NULL-excluding partial index covers its FK');
+    assert.ok(keysCsv.includes(`"beta.notes","part_id","Declared FK","integer","False","beta.parts.id","partial","ix_notes_part WHERE (body <> '')"`), 'any other filter is reported as partial');
+    assert.ok(keysCsv.includes('"alpha.widgets","gadget_id","Declared FK","integer","True","alpha.gadgets.id","false",""'), 'no index stays false');
+    const coverageCell = await page.locator('#content tr[data-row="beta.notes"]').filter({ hasText: 'part_id' }).locator('td').nth(4).innerText();
+    assert.match(coverageCell, /Leading column of a partial index only[\s\S]*ix_notes_part WHERE \(body <> ''\)[\s\S]*not covered/);
 
     // Column Table: CSV and the highlighted HTML report.
     await page.locator('#tab-columns').click();

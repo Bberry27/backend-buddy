@@ -263,6 +263,10 @@
           "$ref": "#/$defs/legacyBoolean",
           "x-tsType": "boolean"
         },
+        "predicate": {
+          "description": "Filter condition of a partial index as the source prints it, for example (parent_id IS NOT NULL). Display-only and never executed (C04). A group with a predicate is partial. When the condition only requires the leading key columns to be non-null, the views count the index as covering lookups by those columns; any other condition stays outside full coverage. Added in contract 1.1.",
+          "$ref": "#/$defs/longText"
+        },
         "expression": {
           "description": "Whether the index is over expressions rather than plain columns. Expression indexes are removed from generic full-coverage heuristics.",
           "$ref": "#/$defs/legacyBoolean",
