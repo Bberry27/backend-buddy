@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **F19** User-initiated report export from the schema explorer: SVG and PNG for the Arc
+  Diagram, Domains and the Schema City flat map, PNG for the 3D city; CSV and a
+  self-contained HTML issue report for the Column Table, with each detected issue
+  highlighted and named in its row; an in-view CSV button on the PK / FK index. Every
+  export carries the snapshot's project, generation time and basis, keeps declared and
+  inferred evidence and unknown and zero apart, and passes CSV cells through the S01
+  formula guard. Host CSV exports gained the same provenance preamble. Downloads are
+  Blobs created in the page on a click; the artifact policy is unchanged.
+
 ### Security
 
 - **R00** The private-data guard gained a `path:coverage-data` rule and now rejects

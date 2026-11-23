@@ -3,8 +3,11 @@ import { scalePoint } from 'd3-scale';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import type { ViewProps } from './types';
 import { buildDependencyModel, dependencyName, dependencyTopology, type DependencyArc } from './dependency-logic';
-import { ARC_COLORS } from './palettes';
+import { ARC_COLORS, HOST_COLORS } from './palettes';
 import { useTheme } from './theme';
+import ExportButtons, { type ExportFormat } from './ExportButtons';
+import { caveatNote, exportFileStem, provenanceLines, provenanceOf } from './export-logic';
+import { exportColors, exportDiagram, inlineSvg } from './svg-export';
 import './ArcDiagram.css';
 
 interface ArcDiagramProps extends ViewProps { onSelectTables?: (ids: string[]) => void }
@@ -13,7 +16,10 @@ const shorten = (name: string) => name.length > 20 ? `${name.slice(0, 17)}...` :
 
 export default function ArcDiagram({ graph, onSelectTable, onSelectTables }: ArcDiagramProps) {
   // SVG marker fills and stroke attributes need resolved colours, not custom properties.
-  const arcColors = ARC_COLORS[useTheme()];
+  const theme = useTheme();
+  const arcColors = ARC_COLORS[theme];
+  const svgRef = useRef<SVGSVGElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const model = useMemo(() => buildDependencyModel(graph), [graph]);
   const topology = useMemo(() => dependencyTopology(model), [model]);
   const [showCycles, setShowCycles] = useState(true);
@@ -60,13 +66,30 @@ export default function ArcDiagram({ graph, onSelectTable, onSelectTables }: Arc
     if (onSelectTables) onSelectTables([...new Set([arc.foreignKey.source, arc.foreignKey.target])]);
     else onSelectTable(arc.foreignKey.source);
   };
+  // F19: the whole diagram at its natural size, not the scrolled viewport, framed with provenance.
+  const exportArcs = async (format: ExportFormat) => {
+    if (format !== 'svg' && format !== 'png') return;
+    if (!svgRef.current || !sectionRef.current) throw new Error('Nothing to export: no tables in this view.');
+    const exportedAt = new Date().toISOString();
+    await exportDiagram(format, {
+      title: `${provenanceOf(graph).project}: Arc Diagram`,
+      lines: [...provenanceLines(provenanceOf(graph), 'Arc Diagram', exportedAt),
+        `Scope: ${topology.tables.length} tables · ${model.foreignKeys.length} declared FK constraints · ${topology.cycles.length} cyclic ${topology.cycles.length === 1 ? 'group' : 'groups'}`],
+      legend: [{ label: 'Child → parent (declared FK)', color: arcColors.normal }, { label: 'Cyclic FK', color: arcColors.cycle, dashed: true },
+        { label: 'Isolated table', color: arcColors.isolated }],
+      notes: [`Declared foreign keys only. Inferred or unresolved links excluded: ${model.ignoredLinks}. Parents first; backward cycle edges are drawn below the axis.`,
+        caveatNote('C07'), caveatNote('C12')],
+      colors: exportColors(sectionRef.current, HOST_COLORS[theme]),
+    }, { markup: inlineSvg(svgRef.current, width, height), width, height }, exportFileStem(graph, 'arc-diagram'));
+  };
   const activate = (event: React.KeyboardEvent, action: () => void) => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); action(); }
   };
-  return <section className="schema-arc" aria-label="Arc Diagram">
+  return <section className="schema-arc" aria-label="Arc Diagram" ref={sectionRef}>
     <div className="schema-arc-toolbar">
       <strong>Arc Diagram</strong><span>{topology.tables.length} tables · {model.foreignKeys.length} declared FKs</span>
       <span className="schema-arc-cycle-count">{topology.cycles.length} cyclic {topology.cycles.length === 1 ? 'group' : 'groups'}</span>
+      <ExportButtons subject="Arc Diagram" formats={['svg', 'png']} onExport={exportArcs} disabled={!topology.tables.length} />
       <button type="button" title={showCycles ? 'Hide cycle groups' : 'Show cycle groups'} aria-label={showCycles ? 'Hide cycle groups' : 'Show cycle groups'}
         aria-expanded={showCycles} aria-controls={`${rawId}-cycles`} onClick={() => setShowCycles(value => !value)}>
         {showCycles ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
@@ -75,7 +98,7 @@ export default function ArcDiagram({ graph, onSelectTable, onSelectTables }: Arc
     <div className={`schema-arc-body${showCycles ? ' schema-arc-with-panel' : ''}`}>
       <div className="schema-arc-chart" ref={chart} tabIndex={0} aria-label="Parent-first table dependencies">
         {!topology.tables.length ? <div className="schema-arc-empty">No tables in this schema.</div> :
-          <svg width={width} height={height} role="group" aria-label="Foreign keys point from child tables to parent tables">
+          <svg ref={svgRef} width={width} height={height} role="group" aria-label="Foreign keys point from child tables to parent tables">
             <defs>
               <marker id={`${rawId}-normal`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                 <path d="M0,0 L8,4 L0,8 Z" fill={arcColors.normal} />
