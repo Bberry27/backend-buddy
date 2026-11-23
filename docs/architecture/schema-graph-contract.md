@@ -44,7 +44,7 @@ The renderer accepts JSON. This is an exchange format for adapters, not a claim 
 - `tables[].id` is a unique lookup ID. Supply separate `schema` and physical `name` for qualified names; do not split identifiers on dots in SQL generation. The display ID may itself contain dots.
 - Every table needs `allColumns` with unique nonempty `name` values. Unknown types remain `Unknown`. Flags `pk`, `index`, and `unique` are booleans; the renderer also accepts legacy `"True"`/`"False"`. `nullable` accepts boolean, null/unknown, or those legacy strings. PK nullability is constrained by the database's rules; confirm exceptions in the adapter.
 - `primaryKey`, when provided, is an ordered array of names and takes precedence over individual PK flags. It preserves a composite key's declared order. Otherwise order follows PK-flagged columns.
-- `indexes` entries: `{ "name": "ix_name", "columns": ["tenant_id", "name"], "unique": false }`. Exclude partial/filtered or expression indexes from generic full-coverage assumptions. Set `partial: true` or `expression: true` and document the definition when applicable; the renderer removes these from coverage heuristics.
+- `indexes` entries: `{ "name": "ix_name", "columns": ["tenant_id", "name"], "unique": false }`. Exclude partial/filtered or expression indexes from generic full-coverage assumptions. Set `partial: true` or `expression: true` when applicable, and put the filter text of a partial index in `predicate` (contract 1.1), for example `"predicate": "(parent_id IS NOT NULL)"`. The renderer removes these from coverage heuristics, except that a partial index whose predicate only requires its leading key columns to be non-null counts as covering lookups by those columns.
 - `uniques` entries: `{ "name": "uq_name", "columns": ["tenant_id", "name"] }`. Include column-level unique constraints as single-column groups. Keep ordered composite groups intact.
 - `checks` entries: `{ "name": "ck_name", "definition": "quantity >= 0" }`.
 - Per-column optional fields: `fk` (display target), `line`, `file`, `ondelete`, and `typeBasis`. Actual relationships come from `links`; adapters should not invent links from `fk` text without validating it.
@@ -202,6 +202,7 @@ An ordered column group. Column-level unique constraints appear as single-column
 | `columns` | array of `string` (1-256 characters) | no | Ordered column names. Every name must exist in allColumns unless the group is an expression index. |
 | `unique` | `boolean` or `null`, or `""` or `"True"` or `"False"` or `"true"` or `"false"`, or `0` or `1` | no | Whether the group enforces uniqueness. |
 | `partial` | `boolean` or `null`, or `""` or `"True"` or `"False"` or `"true"` or `"false"`, or `0` or `1` | no | Whether the index is partial or filtered. Partial indexes are removed from generic full-coverage heuristics. |
+| `predicate` | `string` (up to 4096 characters) | no | Filter condition of a partial index as the source prints it, for example (parent_id IS NOT NULL). Display-only and never executed (C04). A group with a predicate is partial. When the condition only requires the leading key columns to be non-null, the views count the index as covering lookups by those columns; any other condition stays outside full coverage. Added in contract 1.1. |
 | `expression` | `boolean` or `null`, or `""` or `"True"` or `"False"` or `"true"` or `"false"`, or `0` or `1` | no | Whether the index is over expressions rather than plain columns. Expression indexes are removed from generic full-coverage heuristics. |
 | other fields | any JSON value | no | Kept as data and passed through unchanged. |
 
@@ -245,6 +246,7 @@ Per-column observations from an explicitly requested, read-only, capped sample. 
 | other fields | any JSON value | no | Kept as data and passed through unchanged. |
 
 <!-- generated:fields:end -->
+
 
 ---
 

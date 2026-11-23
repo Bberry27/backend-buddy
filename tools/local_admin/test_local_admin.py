@@ -1026,16 +1026,36 @@ class RedundantForeignKeyTests(unittest.TestCase):
         def fetchall(self) -> list[tuple]:
             return self.rows[self.last]
 
-    def graph(self) -> dict[str, object]:
+    def graph(self, indexes: tuple = ()) -> dict[str, object]:
         import introspect_pg
         rows = {
             introspect_pg.TABLES_SQL: self.TABLES,
             introspect_pg.COLUMNS_SQL: self.COLUMNS,
             introspect_pg.CONSTRAINTS_SQL: self.CONSTRAINTS,
-            introspect_pg.INDEXES_SQL: [],
+            introspect_pg.INDEXES_SQL: list(indexes),
         }
         connection = type('Connection', (), {'cursor': lambda _self: self.Cursor(rows)})()
         return introspect_pg.introspect(connection, ['public'])
+
+    def test_F03_a_partial_index_keeps_its_filter_as_display_text(self) -> None:
+        import tools.local_admin.introspection  # noqa: F401 - puts scripts/ on sys.path
+        graph = self.graph(indexes=(
+            # schema, table, index, unique, partial, expression, indkey, predicate
+            ('public', 'child', 'child_parent', False, True, False, '2', '(parent_id IS NOT NULL)'),
+            ('public', 'child', 'child_scope', False, True, False, '3 2', None),
+            ('public', 'child', 'child_pkey', True, False, False, '1', None),
+            ('public', 'child', 'child_long', False, True, False, '3', 'x' * 4097),
+        ))
+        child = next(t for t in graph['tables'] if t['id'] == 'child')
+        indexes = {index['name']: index for index in child['indexes']}
+        self.assertEqual(indexes['child_parent'],
+                         {'name': 'child_parent', 'columns': ['parent_id'], 'unique': False,
+                          'partial': True, 'predicate': '(parent_id IS NOT NULL)'})
+        self.assertEqual(['scope_id', 'parent_id'], indexes['child_scope']['columns'])
+        self.assertNotIn('predicate', indexes['child_scope'], 'a missing filter is not invented')
+        self.assertNotIn('predicate', indexes['child_pkey'])
+        self.assertNotIn('predicate', indexes['child_long'], 'an over-long filter is left out, not cut')
+        self.assertTrue(indexes['child_long']['partial'])
 
     def test_A03_a_pair_declared_twice_is_one_link_under_the_widest_constraint(self) -> None:
         import tools.local_admin.introspection  # noqa: F401 - puts scripts/ on sys.path

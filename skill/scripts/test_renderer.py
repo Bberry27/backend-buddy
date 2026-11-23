@@ -52,6 +52,28 @@ class RendererTests(unittest.TestCase):
         data['tables'][1]['indexes'] = [{'columns': ['item_id'], 'partial': True}]
         self.assertTrue(normalize(data)['tables'][1]['indexes'][0]['partial'])
 
+    def test_F03_index_predicate_is_display_text_and_implies_partial(self):
+        data = fixture()
+        data['tables'][1]['indexes'] = [
+            {'name': 'ix_item', 'columns': ['item_id'], 'predicate': '(item_id IS NOT NULL)'},
+            {'name': 'ix_tenant', 'columns': ['tenant_id'], 'partial': True},
+        ]
+        guarded, unrecorded = normalize(data)['tables'][1]['indexes']
+        self.assertEqual(guarded['predicate'], '(item_id IS NOT NULL)', 'control characters are stripped')
+        self.assertTrue(guarded['partial'], 'a recorded filter makes the group partial')
+        self.assertNotIn('predicate', unrecorded, 'an unrecorded filter is not invented')
+        for bad in (['x'], 'x' * 4097):
+            data = fixture()
+            data['tables'][1]['indexes'] = [{'columns': ['item_id'], 'predicate': bad}]
+            with self.assertRaises(ValueError):
+                normalize(data)
+
+    def test_F03_index_predicate_is_escaped_in_the_artifact(self):
+        data = fixture()
+        data['tables'][1]['indexes'] = [{'columns': ['item_id'], 'predicate': '(item_id IS NOT NULL) </script><b>x</b>'}]
+        html = render(data)
+        self.assertNotIn('</script><b>x</b>', html)
+
     def test_unknown_constraint_names_are_not_invented(self):
         data = fixture()
         data['tables'][1]['uniques'] = [{'columns': ['tenant_id', 'item_id']}]

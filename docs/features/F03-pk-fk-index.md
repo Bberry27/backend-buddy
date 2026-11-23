@@ -1,4 +1,4 @@
-Status: draft | Owner: Frontend lead | Last verified against code: pre-repo (2026-09-07)
+Status: draft | Owner: Frontend lead | Last verified against code: 2026-11-22
 
 # F03 PK/FK index
 
@@ -9,7 +9,7 @@ Status: draft | Owner: Frontend lead | Last verified against code: pre-repo (202
 | Surfaces | host view `keys` (`skill/assets/explorer.html`, tab `#tab-keys` at `:22`, renderer `renderKeys` at `:90-96`, row builder `keyRows` at `:81`); planned React `KeyIndex` with `key-logic.ts` registered under `keys` (W03); planned SPA route `/w/:ws/p/:project/s/:snapshot/keys` (W01) |
 | CTQs | CTQ-02, CTQ-10, CTQ-11 |
 | Caveats | C06, C07 |
-| Last verified | pre-repo (2026-09-07) |
+| Last verified | 2026-11-22 |
 
 ## 1. Purpose
 
@@ -29,18 +29,19 @@ Verified against `skill/assets/explorer.html` and `skill/scripts/build_explorer.
 
 - `keyRows(tables)` at `explorer.html:81` emits one row per column where `c.pk || c.fk || c.name.endsWith('_id')`. `matches` = outgoing links whose `column` equals the column name. Role: `PK + FK` when both flags, else `PK`, else `Declared FK` when `c.fk` is set, else `Inferred reference` when at least one link matches, else `Unresolved ID`.
 - `c.fk` is stamped only for `declared FK` links by `normalize()` (`build_explorer.py:88`); an inferred link never sets `fk` (`test_renderer.py:38-42`), so an inferred reference cannot receive a declared role (C07).
-- `uniqueGroups(t)` at `:43`: the primary key (or the `pk` columns), plus `uniques` and unique `indexes` that are neither `partial` nor `expression`. `indexed(t,c)` at `:44`: `c.index || c.unique`, or the column leads a unique group, or leads a non-partial, non-expression index.
+- `uniqueGroups(t)` at `:43`: the primary key (or the `pk` columns), plus `uniques` and unique `indexes` that are neither `partial` nor `expression`. `fullyIndexed(t,c)` at `:44`: `c.index || c.unique`, or the column leads a unique group, or leads a non-partial, non-expression index. `indexed(t,c)` (same line) also accepts a partial index that leads with the column when its filter only requires that column to be non-null.
+- Partial-index coverage (B11), all on `:44`: `nullGuard(predicate, names)` returns the columns a partial-index filter requires to be non-null when the filter says nothing else (a conjunction of `<column> IS NOT NULL`, parenthesised or not, quoted or not), otherwise `null`; it parses display-only text and never executes it. `coverage(t,c)` is `full` (as `fullyIndexed`), `guarded` (a partial index leads with the column and its filter is a null guard on that column alone), `partial` (only partial indexes with any other filter, or with no recorded filter, lead with it) or `none`. An equality lookup or join on the column, including the referential check a parent delete runs, implies the column is not null, so a `guarded` index serves it; a `partial` one serves only rows inside its filter. `packages/explorer/src/index-coverage.ts` is the commented original, and `index-coverage.test.ts` checks the host copy against it.
 
 **Rendering**
 
 - `renderKeys(tables)` at `:90-96`. The search text is applied a second time inside the view against the row's table id, class name, domain, column name, and `target.targetColumn` strings (`:92`), so a search for a target column narrows key rows even though `scoped()` (`:60`) matched by table.
 - Toolbar (`:93`): `N key columns`, key-type select (`aria-label="Key type"`, options `All key types | PK | PK + FK | Declared FK | Inferred reference | Unresolved ID`, state `state.keyKind` at `:37`), and the note text `Composite key membership retained`.
-- Table columns (`:93`): `Entity / column` (table-link + column name), `Role` (badge; `good` styling when `pk` or `fk`), `Type / nullability` (`PK required` | `Nullable` | `Required` | `Implicit / unknown`), `Reference / target type` (per match: `target.targetColumn`, target column type or `Target column not found`, link `kind`, and `DELETE <ondelete>` when set; when no match but `c.fk` is set the raw `fk` string; otherwise `No target recorded`), `Index coverage` (`Leading column / unique key` | `Not recorded as leading column`), `Unique key groups` (each group as `(a, b)` or `None recorded`). Rows carry `data-row="<table id>"`; the selected table's rows highlight (`:65`).
+- Table columns (`:93`): `Entity / column` (table-link + column name), `Role` (badge; `good` styling when `pk` or `fk`), `Type / nullability` (`PK required` | `Nullable` | `Required` | `Implicit / unknown`), `Reference / target type` (per match: `target.targetColumn`, target column type or `Target column not found`, link `kind`, and `DELETE <ondelete>` when set; when no match but `c.fk` is set the raw `fk` string; otherwise `No target recorded`), `Index coverage` (`Leading column / unique key` | `Leading column of a partial index that only excludes NULL keys`, with the index name, its filter and `covers lookups by this column` | `Leading column of a partial index only`, with each such index and its filter (or `filter not recorded`) and `lookups outside the filter are not covered` | `Not recorded as leading column`), `Unique key groups` (each group as `(a, b)` or `None recorded`). Rows carry `data-row="<table id>"`; the selected table's rows highlight (`:65`).
 - Inspector `Keys` button (`:78`) clears the domain and type filters, sets the search box to the table id, resets `keyKind`, and switches to this view; this is the only inbound navigation to the view today.
 
 **Export**
 
-- `exportRows` (`:95`): `table column role type nullable target index_leading unique_groups source_line`.
+- `exportRows` (`:95`): `table column role type nullable target index_leading index_partial unique_groups source_line`. `index_leading` is `true` for `full` and `guarded` coverage, `partial` for `partial`, `false` for `none`; `index_partial` lists `<index> WHERE <filter>` (or `<index> (filter not recorded)`) for the partial indexes behind a `guarded` or `partial` value and is empty otherwise.
 - F19: an in-view `Export PK / FK index as CSV` button (`explorer.html:93`, wired at `:94`) calls the shared `exportCSV` (`:182`), so the export is reachable at every width. Every host CSV now opens with `# ` provenance lines (view, project, `source.generated`, `source.basis`, source identifiers, export time, scope from the search, domain, entity-type and key-type filters), each a formula-guarded cell.
 
 **Defects and gaps (current state)**
@@ -50,7 +51,7 @@ Verified against `skill/assets/explorer.html` and `skill/scripts/build_explorer.
 - The note `Composite key membership retained` (`:93`) is a paraphrase of C06; MVP uses the canonical string.
 - `nullable` is exported as the raw string (`'True' | 'False' | ''` -> `implicit`) at `:95`.
 - No `data-selected` attribute; the view has no column-level selection even though its rows are columns.
-- `Index coverage` is a leading-column test only (`:44`); it does not consider predicates or expressions beyond excluding partial and expression indexes, which is stated in C06.
+- `Index coverage` is a leading-column test (`:44`). Expression indexes are still excluded. Partial indexes are judged by their recorded filter (B11): only a filter that requires nothing but non-null key columns counts as coverage, so `WHERE deleted_at IS NULL` and similar filters stay `partial` even where the application only ever queries those rows. Predicates are recorded by the PostgreSQL catalog reader (contract 1.1); other adapters that set only `partial: true` show `filter not recorded`.
 - The header export button is hidden at widths <= 700 px (`:14`); the in-view button added by F19 is not.
 
 ## 4. Intended behaviour
@@ -68,7 +69,7 @@ Verified against `skill/assets/explorer.html` and `skill/scripts/build_explorer.
 ### Later
 
 - **B10** Keys row -> Living ERD with the relationship selected (drill-through registry "Later").
-- **B11** Include index predicate and expression text when the contract carries `definition` for indexes (C01 promotes `definition`), so coverage can say why a partial index does not count.
+- **B11** (done 2026-11-22) Index entries carry the filter of a partial index in `predicate` (contract 1.1), and coverage says why a partial index does or does not count; see section 3. Expression text is not yet carried.
 
 ## 5. Drill-through contract
 
@@ -98,6 +99,7 @@ Reference: `docs/architecture/drill-through-contract.md` (ADR-0005, D02). Regist
 |---|---|---|
 | `allColumns[].pk`, `fk`, `index`, `unique`, `nullable`, `type`, `name`, `ondelete` | yes (coerced or defaulted at `build_explorer.py:46-50`) | `nullable ''` shows `Implicit / unknown`; `ondelete ''` shows nothing |
 | `tables[].primaryKey`, `uniques[]`, `indexes[]` with `unique`, `partial`, `expression`, `columns` | yes (defaults and validation at `:53-67`) | empty groups show `None recorded` |
+| `indexes[].predicate` | optional (contract 1.1; capped display text, and a group that carries one is made `partial` by `normalize()`) | a partial index shows `filter not recorded` and is not counted as coverage |
 | `links[]` with `kind`, `column`, `target`, `targetColumn`, `constraintId` | yes | no match shows `No target recorded` |
 | `allColumns[].line` | optional | `source_line` `0` |
 
@@ -106,7 +108,7 @@ No `LiveConnection` method is used.
 ## 7. Caveats
 
 > C06: "Membership in a composite unique key or composite primary key does not make any member column unique on its own. Uniqueness is stated per key group, and index coverage depends on column order, predicates, and expressions."
-> Shown: `Unique key groups` column lists whole groups (`:93`), `Index coverage` tests the leading column only and excludes partial and expression indexes (`:43-44`); toolbar note (today the paraphrase `Composite key membership retained`, MVP canonical text, B6).
+> Shown: `Unique key groups` column lists whole groups (`:93`), `Index coverage` tests the leading column only, excludes expression indexes, and names each partial index with its filter, counting it only when the filter just excludes NULL keys (`:43-44`); toolbar note (today the paraphrase `Composite key membership retained`, MVP canonical text, B6).
 
 > C07: "Declared evidence (from the identified source or catalog) and inferred evidence (from naming or heuristics) are visibly distinguishable in every view, export, and finding. An inferred reference never receives a declared label, and an unresolved inferred target never produces an executable validation query."
 > Shown: `Role` badge values `Declared FK | Inferred reference | Unresolved ID` (`:81`), the `kind` text in the reference cell (`:93`), the key-type filter options (`:93`), and the CSV `role` column (`:95`).
@@ -161,16 +163,18 @@ No `LiveConnection` method is used.
 
 | Concern | Path |
 |---|---|
-| Current host view | `skill/assets/explorer.html:81` (`keyRows`), `:43-44` (`uniqueGroups`, `indexed`), `:90-96` (`renderKeys`), `:78` (inspector `Keys` button) |
+| Current host view | `skill/assets/explorer.html:81` (`keyRows`), `:43-44` (`uniqueGroups`, `indexed`, `nullGuard`, `coverage`, `coverageHTML`), `:90-96` (`renderKeys`), `:78` (inspector `Keys` button) |
 | Planned view | `packages/explorer/src/KeyIndex.tsx` (W03) |
 | Planned logic | `packages/explorer/src/key-logic.ts`, `csv.ts` (W03) |
 | Renderer rules relied on | `skill/scripts/build_explorer.py:46-67` (column flags, groups), `:88` (`fk` stamping), `:94-95` (inferred dropped when declared exists) |
-| Tests | `skill/scripts/check_explorer.cjs` (today); `key-logic.test.ts`, `tests/e2e/views/keys.spec.ts` (W03/S02); `packages/explorer/src/export-browser.test.mjs` (F19 download and formula guard) |
+| Partial-index coverage | `packages/explorer/src/index-coverage.ts` (also used by the Column Table's `tableColumnFacts`), `scripts/introspect_pg.py` (`pg_get_expr(indpred, indrelid)` into `predicate`), `skill/scripts/build_explorer.py` (`predicate` capped, implies `partial`) |
+| Tests | `skill/scripts/check_explorer.cjs` (today); `index-coverage.test.ts` (parser, lookup coverage, host parity), `column-logic.test.ts`, `test_renderer.py` and `tools/local_admin/test_local_admin.py` (`F03` tests); `key-logic.test.ts`, `tests/e2e/views/keys.spec.ts` (W03/S02); `packages/explorer/src/export-browser.test.mjs` (F19 download and formula guard) |
 
 ### Change log
 
 | Date | PR | WP | Change |
 |---|---|---|---|
+| 2026-11-22 | - | F03 | B11 partial-index coverage. The export marked every FK column led only by a partial index as `index_leading=false`, which on a real catalog was about a quarter of the columns it reported as unindexed. PostgreSQL introspection now records each partial index's filter as `predicate` (contract 1.1); the PK / FK index and the Column Table count a partial index whose filter only excludes NULL keys as covering lookups by those columns, and name every other partial index with its filter. The CSV `index_leading` column gains the value `partial`, and a new `index_partial` column follows it. |
 | 2026-11-22 | - | F19 | In-view CSV export button; provenance preamble and scope line on every host CSV export. |
 | 2026-09-07 | - | D05 | Initial document from the pre-repo code. |
 | 2026-09-07 | - | D05 | Review fixes: AC2 and AC3 tagged CTQ-10 (logic parity with the host `keyRows` and `indexed`, as AC1). |

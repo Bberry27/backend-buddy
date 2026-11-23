@@ -125,6 +125,12 @@ def normalize(raw):
                 group['name'] = _text(group['name'], f"{t['id']}: {kind} name")
                 for flag in ('unique', 'partial', 'expression'):
                     group[flag] = boolean(group.get(flag))
+                if 'predicate' in group:
+                    # Display-only filter text (contract 1.1). A group that carries a condition is
+                    # partial whatever its flag says, so no view can count it as full coverage.
+                    group['predicate'] = _text(group['predicate'], f"{t['id']}: {kind} predicate", cap=TEXT_CAP, multiline=True)
+                    if group['predicate'].strip():
+                        group['partial'] = True
                 if not group['expression'] and not set(group['columns']).issubset(names):
                     raise ValueError(f"{t['id']}: {kind} refers to unknown columns")
         for c in t['checks']:

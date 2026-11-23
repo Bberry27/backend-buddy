@@ -29,6 +29,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **F03** The PK / FK index no longer reports a foreign-key column as unindexed when a partial
+  index leads with it. PostgreSQL introspection records each partial index's filter (contract
+  1.1, `predicate`). A filter that only excludes NULL keys, such as `WHERE parent_id IS NOT
+  NULL`, counts as covering lookups by that column, in the PK / FK index and in the Column
+  Table's unindexed-FK issue; any other filter is shown with the index name and stays outside
+  full coverage. The CSV `index_leading` column can now read `partial`, and a new
+  `index_partial` column names the partial indexes and their filters.
 - **A03** Populate structure no longer fails with "Duplicate relationship pair" when a
   PostgreSQL column pair is declared by two foreign keys, typically a single-column key
   beside a composite key that starts with the same column. Each pair is kept once, under
