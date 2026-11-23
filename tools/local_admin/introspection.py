@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'skill/scripts'))
 
-from introspect_pg import diagnose, introspect, project_key  # noqa: E402
+from introspect_pg import REDUNDANT_BASIS, diagnose, introspect, project_key  # noqa: E402
 
 CONNECT_TIMEOUT = 10
 STATEMENT_TIMEOUT_MS = 30_000
@@ -178,6 +178,7 @@ def introspect_to_snapshot(dsn: str, ca_cert_pem: str, output: Path, *,
         connection.close()
 
     dropped = graph.pop('droppedLinks')
+    redundant = graph.pop('redundantLinks')
     columns = sum(len(t['allColumns']) for t in graph['tables'])
     views = sum(1 for t in graph['tables'] if t.get('kind') == 'view')
 
@@ -191,6 +192,8 @@ def introspect_to_snapshot(dsn: str, ca_cert_pem: str, output: Path, *,
     if dropped:
         basis.append(f'{dropped} foreign-key column pairs referenced a table outside the '
                      'selected schemas and were omitted.')
+    if redundant:
+        basis.append(REDUNDANT_BASIS.format(count=redundant))
 
     snapshot = {
         'contractVersion': '1.0',
@@ -228,6 +231,7 @@ def introspect_to_snapshot(dsn: str, ca_cert_pem: str, output: Path, *,
         'columns': columns,
         'foreignKeyColumnPairs': len(graph['links']),
         'droppedLinks': dropped,
+        'redundantLinks': redundant,
     }
 
 
